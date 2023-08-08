@@ -8,7 +8,7 @@
 cfd::Parameter::Parameter(const MpiParallel &mpi_parallel) {
   read_param_from_file();
   int_parameters["myid"] = mpi_parallel.my_id;
-  //int_parameters["n_proc"] = mpi_parallel.n_proc; // Currently commented, assuming the n_proc is not needed outside the class MpiParallel
+  int_parameters["n_proc"] = mpi_parallel.n_proc;
   bool_parameters["parallel"] = cfd::MpiParallel::parallel;
 }
 
@@ -34,23 +34,24 @@ void cfd::Parameter::read_param_from_file() {
   }
 
   update_parameter("n_var", 5);
-  update_parameter("n_turb",0);
+  update_parameter("n_turb", 0);
   integer n_scalar{0};
-  if (bool_parameters["turbulence"]==1){
-    if (int_parameters["turbulence_method"]==1){ //RANS
-      if (int_parameters["RANS_model"]==1) {// SA
-        update_parameter("n_turb",1);
+  if (bool_parameters["turbulence"] == 1) {
+    if (int_parameters["turbulence_method"] == 1) { //RANS
+      if (int_parameters["RANS_model"] == 1) {// SA
+        update_parameter("n_turb", 1);
         update_parameter("n_var", 5 + 1);
-        n_scalar+=1;
-      }
-      else { // SST
+        n_scalar += 1;
+      } else { // SST
         update_parameter("n_turb", 2);
         update_parameter("n_var", 5 + 2);
-        n_scalar+=2;
+        n_scalar += 2;
       }
     }
+  } else {
+    update_parameter("RANS_model", 0);
   }
-  update_parameter("n_scalar",n_scalar);
+  update_parameter("n_scalar", n_scalar);
 }
 
 void cfd::Parameter::read_one_file(std::ifstream &file) {

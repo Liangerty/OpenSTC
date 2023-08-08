@@ -21,27 +21,35 @@ struct DZone {
   ParallelFace *parface= nullptr;
   ggxl::Array3D<real> jac;
   ggxl::Array3D<gxl::Matrix<real, 3, 3, 1>> metric;
+  ggxl::Array3D<real> wall_distance;
+
   ggxl::VectorField3D<real> cv; // Conservative variable: 0-:rho, 1-:rho*u, 2-:rho*v, 3-:rho*w, 4-:rho*(E+V*V/2), 5->(4+Ns)-:rho*Y
   ggxl::VectorField3D<real> bv; // Basic variable: 0-density, 1-u, 2-v, 3-w, 4-pressure, 5-temperature
   ggxl::VectorField3D<real> sv; // Scalar variables: [0,n_spec) - mass fractions; [n_spec,n_spec+n_turb) - turbulent variables
-  ggxl::VectorField3D<real> bv_last; // Basic variable of last step: 0-density, 1-velocity magnitude, 2-pressure, 3-temperature
+  ggxl::VectorField3D<real> bv_last; // Basic variable of last step
+//  ggxl::VectorField3D<real> residual; // The residual of density, velocity magnitude, pressure, and temperature
   ggxl::Array3D<real> vel;      // Velocity magnitude
   ggxl::Array3D<real> acoustic_speed;
   ggxl::Array3D<real> mach;     // Mach number
   ggxl::Array3D<real> mul;      // Dynamic viscosity
-  ggxl::Array3D<real> conductivity;      // Dynamic viscosity
+  ggxl::Array3D<real> thermal_conductivity;      // Thermal conductivity
 
   // Mixture variables
   ggxl::VectorField3D<real> rho_D; // the mass diffusivity of species
   ggxl::Array3D<real> gamma;  // specific heat ratio
+  ggxl::Array3D<real> cp;   // specific heat for constant pressure
   // Turbulent variables
   ggxl::Array3D<real> mut;  // turbulent viscosity
+  ggxl::Array3D<real> turb_therm_cond; // turbulent thermal conductivity
+  ggxl::VectorField3D<real> turb_src_jac; // turbulent source jacobian, for implicit treatment
   // Flamelet variables
   ggxl::Array3D<real> scalar_diss_rate;  // scalar dissipation rate
 
   // Variables used in computation
   ggxl::VectorField3D<real> dq; // The residual for flux computing
-  ggxl::Array3D<real[3]> inv_spectr_rad;  // inviscid spectral radius. Used when LUSGS type temporal scheme is used.
+  ggxl::VectorField3D<real> dq0; // Used when DPLUR is enabled
+  ggxl::VectorField3D<real> dqk; // Used when DPLUR is enabled
+  ggxl::Array3D<real[3]> inv_spectr_rad;  // inviscid spectral radius. Used when DPLUR type temporal scheme is used.
   ggxl::Array3D<real> visc_spectr_rad;  // viscous spectral radius.
   ggxl::Array3D<real> dt_local; //local time step. Used for steady flow simulation
 };
@@ -66,6 +74,7 @@ struct Field{
   gxl::VectorField3D<real> bv;  // basic variables, including density, u, v, w, p, temperature
   gxl::VectorField3D<real> sv;  // passive scalar variables, including species mass fractions, turbulent variables, mixture fractions, etc.
   gxl::VectorField3D<real> ov;  // other variables used in the computation, e.g., the Mach number, the mut in turbulent computation, scalar dissipation rate in flamelet, etc.
+  gxl::VectorField3D<real> var_without_ghost_grid; // Some variables that only stored on core grids.
 #ifdef GPU
   DZone *d_ptr = nullptr;
   DZone *h_ptr = nullptr;

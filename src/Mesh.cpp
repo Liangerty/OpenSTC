@@ -132,14 +132,46 @@ void cfd::InnerFace::register_boundary(const integer ngg, const integer dim) {
     src_tar[i] = std::abs(src_tar[i]) - 1;
   }
   // Include the corners into the transfer
-  for (integer i = 0; i < 3; ++i) {
-    if (i != face) {
-      range_start[i] -= loop_dir[i] * ngg;
-      range_end[i] += loop_dir[i] * ngg;
-      target_start[i] -= target_loop_dir[i] * loop_dir[i] * ngg;
-      target_end[i] += target_loop_dir[i] * loop_dir[i] * ngg;
-    }
-  }
+  // Commented on 2023/6/20. The data on corneres are not communicated
+  /*
+   * For corners such as
+   *
+   *                    |
+   *                    |
+   *                    |
+   *                    |
+   *                    |
+   * -------------------*
+   *                    :
+   *                    :
+   *                    :
+   *                    :
+   *
+   * which consists of a vertical wall(|),
+   *                   a horizontal wall(-)
+   *               and a vertical inner boundary(:)
+   *             below the corner point(*).
+   * We name the left side block 0, which contains the horizontal line and the fluid below,
+   * the right side block 1, which contains the vertical line and the fuild on its right.
+   *
+   * If the communication contains the ghost grids, then for block 1,
+   * the communicated region would contain not only the vertical inner boundary,
+   * but also 2 points above the corner point.
+   * Those 2 points above the corner point is assigned to be the average between the 2 blocks.
+   * For this scene, the value of those 2 points are 0 in block 1 because they are on the wall.
+   * Those values on block 0 is the negative of the inner 2 points below the horizontal wall
+   * as they are ghost grids in block 0. Thus, when we average the 2 values, we get non-zero value on these 2 points,
+   * which disobeys the wall bondary condition.
+   *
+   * */
+//  for (integer i = 0; i < 3; ++i) {
+//    if (i != face) {
+//      range_start[i] -= loop_dir[i] * ngg;
+//      range_end[i] += loop_dir[i] * ngg;
+//      target_start[i] -= target_loop_dir[i] * loop_dir[i] * ngg;
+//      target_end[i] += target_loop_dir[i] * loop_dir[i] * ngg;
+//    }
+//  }
   for (integer i = 0; i < 3; ++i) {
     n_point[i] = abs(range_start[i] - range_end[i]) + 1;
   }

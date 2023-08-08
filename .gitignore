@@ -126,3 +126,10 @@
 /depends/lib/debug/libfmtd.a
 /depends/lib/release/fmt.lib
 /depends/lib/release/libfmt.a
+/.idea/vcs.xml
+/cmake-build-debug/.cmake/api/v1/reply/cache-v2-b9a5da9e4967b12c8782.json
+/cmake-build-debug/.cmake/api/v1/reply/codemodel-v2-1cf775856971cf1179a5.json
+/cmake-build-debug/.cmake/api/v1/reply/index-2023-08-08T14-00-35-0677.json
+/cmake-build-debug/.cmake/api/v1/reply/target-OpenSTC-Debug-81c230a51b9472d7d748.json
+/cmake-build-debug/src/CMakeFiles/OpenSTC.dir/PostProcess.cu.obj
+/cmake-build-debug/src/CMakeFiles/OpenSTC.dir/SST.cu.obj

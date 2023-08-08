@@ -10,4 +10,6 @@ __device__ void first_order_reconstruct(const real *pv, real *pv_l, real *pv_r, 
 __device__ void
 MUSCL_reconstruct(const real *pv, real *pv_l, real *pv_r, integer idx_shared, integer n_var, integer limiter);
 
+__device__ void NND2_reconstruct(const real *pv, real *pv_l, real *pv_r, integer idx_shared, integer n_var, integer limiter);
+
 } // cfd

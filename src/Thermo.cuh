@@ -1,12 +1,11 @@
 #pragma once
 #include "Define.h"
-#include <cuda_runtime.h>
 
 namespace cfd{
 struct DParameter;
 struct DZone;
 
-__device__ void compute_enthalpy(real t, real *enthalpy, DParameter* param);
+__device__ void compute_enthalpy(real t, real *enthalpy, const DParameter* param);
 
 __device__ void compute_cp(real t, real *cp, DParameter* param);
 

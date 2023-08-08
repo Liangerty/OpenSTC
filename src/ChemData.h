@@ -2,9 +2,6 @@
 
 #include "Define.h"
 #include "Parameter.h"
-#include <map>
-#include <string>
-#include <vector>
 #include "gxl_lib/Matrix.hpp"
 
 namespace cfd {

@@ -2,7 +2,7 @@
 #include "DParameter.h"
 #include "Constants.h"
 
-__device__ void cfd::compute_enthalpy(real t, real *enthalpy, cfd::DParameter *param) {
+__device__ void cfd::compute_enthalpy(real t, real *enthalpy, const cfd::DParameter *param) {
   const real t2{t * t}, t3{t2 * t}, t4{t3 * t}, t5{t4 * t};
   for (int i = 0; i < param->n_spec; ++i) {
     if (t < param->t_low[i]) {

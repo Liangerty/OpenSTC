@@ -91,6 +91,11 @@ public:
     }
   }
 
+  T* operator[](int l){
+    static_assert(major==Major::ColMajor);
+    return &val[l*sz];
+  }
+
   T *data() { return val; }
 
   auto size() { return sz; }
@@ -226,16 +231,16 @@ public:
     }
   }
 
-  T* operator[](int l){
-    static_assert(major==Major::ColMajor);
-    return &data_[l*sz];
+  T *operator[](int l) {
+    static_assert(major == Major::ColMajor);
+    return &data_[l * sz];
   }
 
-  void resize(int ni, int nj, int nk, int nl, int ngg, T&& t=T{});
+  void resize(int ni, int nj, int nk, int nl, int ngg, T &&t = T{});
 };
 
 template<typename T, Major major>
-void VectorField3D<T, major>::resize(int ni, int nj, int nk, int nl, int ngg, T&& t) {
+void VectorField3D<T, major>::resize(int ni, int nj, int nk, int nl, int ngg, T &&t) {
   ng = ngg;
   n1 = ni + 2 * ngg;
   n2 = nj + 2 * ngg;

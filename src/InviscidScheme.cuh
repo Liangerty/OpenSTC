@@ -15,8 +15,9 @@ __device__ void
 reconstruction(real *pv, real *pv_l, real *pv_r, integer idx_shared, DZone *zone, DParameter *param);
 
 template<MixtureModel mix_model, TurbMethod turb_method>
-__device__ void AUSMP_compute_inviscid_flux(DZone *zone, real *pv, integer tid, DParameter *param, real *fc, real *metric,
-                        const real *jac);
+__device__ void
+AUSMP_compute_inviscid_flux(DZone *zone, real *pv, integer tid, DParameter *param, real *fc, real *metric,
+                            const real *jac);
 
 // Implementations
 
@@ -28,6 +29,8 @@ reconstruction(real *pv, real *pv_l, real *pv_r, const integer idx_shared, DZone
   const auto n_var = zone->n_var;
   switch (param->reconstruction) {
     case 2:MUSCL_reconstruct(pv, pv_l, pv_r, idx_shared, n_var, param->limiter);
+      break;
+    case 3:NND2_reconstruct(pv, pv_l, pv_r, idx_shared, n_var, param->limiter);
       break;
     default:first_order_reconstruct(pv, pv_l, pv_r, idx_shared, n_var);
   }
@@ -54,11 +57,11 @@ reconstruction(real *pv, real *pv_l, real *pv_r, const integer idx_shared, DZone
     el += hl[l] * pv_l[l + 5];
     er += hr[l] * pv_r[l + 5];
   }
-  pv_l[5 + n_spec] = pv_l[0] * el - pv_l[4]; //total energy
-  pv_r[5 + n_spec] = pv_r[0] * er - pv_r[4];
+  pv_l[n_var] = pv_l[0] * el - pv_l[4]; //total energy
+  pv_r[n_var] = pv_r[0] * er - pv_r[4];
 
-  pv_l[6 + n_spec] = cpl / cvl; //specific heat ratio
-  pv_r[6 + n_spec] = cpr / cvr;
+  pv_l[n_var + 1] = cpl / cvl; //specific heat ratio
+  pv_r[n_var + 1] = cpr / cvr;
 }
 
 template<MixtureModel mix_model, TurbMethod turb_method>
@@ -69,12 +72,14 @@ reconstruction(real *pv, real *pv_l, real *pv_r,
   switch (param->reconstruction) {
     case 2:MUSCL_reconstruct(pv, pv_l, pv_r, idx_shared, n_var, param->limiter);
       break;
+    case 3:NND2_reconstruct(pv, pv_l, pv_r, idx_shared, n_var, param->limiter);
+      break;
     default:first_order_reconstruct(pv, pv_l, pv_r, idx_shared, n_var);
   }
   real el = 0.5 * (pv_l[1] * pv_l[1] + pv_l[2] * pv_l[2] + pv_l[3] * pv_l[3]);
   real er = 0.5 * (pv_r[1] * pv_r[1] + pv_r[2] * pv_r[2] + pv_r[3] * pv_r[3]);
-  pv_l[5] = el * pv_l[0] + pv_l[4] / (gamma_air - 1);
-  pv_r[5] = er * pv_r[0] + pv_r[4] / (gamma_air - 1);
+  pv_l[n_var] = el * pv_l[0] + pv_l[4] / (gamma_air - 1);
+  pv_r[n_var] = er * pv_r[0] + pv_r[4] / (gamma_air - 1);
 }
 
 template<MixtureModel mix_model, TurbMethod turb_method>
@@ -82,10 +87,10 @@ __device__ void
 AUSMP_compute_inviscid_flux(DZone *zone, real *pv, integer tid, DParameter *param, real *fc, real *metric,
                             const real *jac) {
   const auto ng{zone->ngg};
-  constexpr integer n_reconstruction = 7 + MAX_SPEC_NUMBER + 4; // rho,u,v,w,p,Y_{1...Ns},E,gamma,(k,omega,z,z_prime)
+  constexpr integer n_reconstruction = 7 + MAX_SPEC_NUMBER + 4; // rho,u,v,w,p,Y_{1...Ns},(k,omega,z,z_prime),E,gamma
   real pv_l[n_reconstruction], pv_r[n_reconstruction];
   const integer i_shared = tid - 1 + ng;
-  reconstruction<mix_model,turb_method>(pv, pv_l, pv_r, i_shared, zone, param);
+  reconstruction<mix_model, turb_method>(pv, pv_l, pv_r, i_shared, zone, param);
 
   auto metric_l = &metric[i_shared * 3], metric_r = &metric[(i_shared + 1) * 3];
   auto jac_l = jac[i_shared], jac_r = jac[i_shared + 1];
@@ -100,9 +105,10 @@ AUSMP_compute_inviscid_flux(DZone *zone, real *pv, integer tid, DParameter *para
   const real pl = pv_l[4], pr = pv_r[4], rho_l = pv_l[0], rho_r = pv_r[0];
   const integer n_spec = zone->n_spec;
   real gam_l{gamma_air}, gam_r{gamma_air};
+  const integer n_var = zone->n_var;
   if (n_spec > 0) {
-    gam_l = pv_l[6 + n_spec];
-    gam_r = pv_r[6 + n_spec];
+    gam_l = pv_l[n_var + 1];
+    gam_r = pv_r[n_var + 1];
   }
   const real c = 0.5 * (std::sqrt(gam_l * pl / rho_l) + std::sqrt(gam_r * pr / rho_r));
   const real mach_l = ul / c, mach_r = ur / c;
@@ -135,14 +141,13 @@ AUSMP_compute_inviscid_flux(DZone *zone, real *pv, integer tid, DParameter *para
   const real mass_flux_half = c * (rho_l * mach_pos + rho_r * mach_neg);
   const real coeff = mass_flux_half * grad_k_div_jac;
 
-  integer n_var = zone->n_var;
   auto fci = &fc[tid * n_var];
   if (mass_flux_half >= 0) {
     fci[0] = coeff;
     fci[1] = coeff * pv_l[1] + p_coeff * k1;
     fci[2] = coeff * pv_l[2] + p_coeff * k2;
     fci[3] = coeff * pv_l[3] + p_coeff * k3;
-    fci[4] = coeff * (pv_l[5 + n_spec] + pv_l[4]) / pv_l[0];
+    fci[4] = coeff * (pv_l[n_var] + pv_l[4]) / pv_l[0];
     for (int l = 5; l < n_var; ++l) {
       fci[l] = coeff * pv_l[l];
     }
@@ -151,7 +156,7 @@ AUSMP_compute_inviscid_flux(DZone *zone, real *pv, integer tid, DParameter *para
     fci[1] = coeff * pv_r[1] + p_coeff * k1;
     fci[2] = coeff * pv_r[2] + p_coeff * k2;
     fci[3] = coeff * pv_r[3] + p_coeff * k3;
-    fci[4] = coeff * (pv_r[5 + n_spec] + pv_r[4]) / pv_r[0];
+    fci[4] = coeff * (pv_r[n_var] + pv_r[4]) / pv_r[0];
     for (int l = 5; l < n_var; ++l) {
       fci[l] = coeff * pv_r[l];
     }

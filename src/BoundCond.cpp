@@ -1,7 +1,5 @@
 #include "BoundCond.h"
-#include "ChemData.h"
 #include "gxl_lib/MyString.h"
-#include <cmath>
 
 cfd::Wall::Wall(integer type_label, std::ifstream &bc_file) : label(type_label) {
   std::map<std::string, std::string> opt;
@@ -37,7 +35,8 @@ cfd::Wall::Wall(integer type_label, std::ifstream &bc_file) : label(type_label) 
 cfd::Wall::Wall(const std::map<std::string, std::variant<std::string, integer, real>> &info)
     : label(std::get<integer>(info.at("label"))) {
   if (info.contains("thermal_type")) {
-    thermal_type = std::get<std::string>(info.at("thermal_type")) == "isothermal" ? ThermalType::isothermal : ThermalType::adiabatic;
+    thermal_type = std::get<std::string>(info.at("thermal_type")) == "isothermal" ? ThermalType::isothermal
+                                                                                  : ThermalType::adiabatic;
   }
   if (thermal_type == ThermalType::isothermal) {
     if (info.contains("temperature")) {
@@ -49,3 +48,5 @@ cfd::Wall::Wall(const std::map<std::string, std::variant<std::string, integer, r
 }
 
 cfd::Outflow::Outflow(integer type_label) : label(type_label) {}
+
+cfd::Symmetry::Symmetry(integer type_label) : label(type_label) {}

@@ -41,7 +41,7 @@ int32_t Output<mix_model, turb_method>::acquire_variable_names(std::vector<std::
     var_name.resize(n_var);
     auto &names = species.spec_list;
     for (auto &[name, ind]: names) {
-      var_name[ind+10]=name;
+      var_name[ind + 10] = name;
     }
   }
   if constexpr (turb_method == TurbMethod::RANS) {
@@ -49,7 +49,7 @@ int32_t Output<mix_model, turb_method>::acquire_variable_names(std::vector<std::
       n_var += 1; // SA variable?
     } else if (rans_method == 2) {
       n_var += 2; // k, omega
-      var_name.emplace_back("k");
+      var_name.emplace_back("tke");
       var_name.emplace_back("omega");
     }
   }
@@ -73,7 +73,11 @@ void Output<mix_model, turb_method>::print_field(integer step, int ngg) const {
   }
 
   const std::filesystem::path out_dir("output/field");
-  FILE *fp = fopen((out_dir.string() + std::format("/flowfield{:>4}.plt", myid)).c_str(), "wb");
+  char id[5];
+  sprintf(id, "%4d", myid);
+  std::string id_str = id;
+  FILE *fp = fopen((out_dir.string() + "/flowfield" + id_str + ".plt").c_str(), "wb");
+//  FILE *fp = fopen((out_dir.string() + std::format("/flowfield{:>4}.plt", myid)).c_str(), "wb");
 
   // I. Header section
 
@@ -108,7 +112,7 @@ void Output<mix_model, turb_method>::print_field(integer step, int ngg) const {
     constexpr float zone_marker{299.0f};
     fwrite(&zone_marker, 4, 1, fp);
     // 2. Zone name.
-    gxl::write_str(std::format("zone {}", i).c_str(), fp);
+    gxl::write_str(("zone " + std::to_string(i)).c_str(), fp);
     // 3. Parent zone. No longer used
     constexpr int32_t parent_zone{-1};
     fwrite(&parent_zone, 4, 1, fp);
@@ -193,6 +197,7 @@ void Output<mix_model, turb_method>::print_field(integer step, int ngg) const {
     auto &v{field[blk]};
     const auto mx{b.mx}, my{b.my}, mz{b.mz};
     const std::vector<gxl::Array3D<double>> &vars{b.x, b.y, b.z};
+    // Potential optimization: the x/y/z coordinates are fixed, thus their max/min values can be saved instead of comparing them every time.
     for (auto &var: vars) {
       double min_val{var(-ngg, -ngg, -ngg)}, max_val{var(-ngg, -ngg, -ngg)};
       for (int k = -ngg; k < mz + ngg; ++k) {
@@ -214,10 +219,10 @@ void Output<mix_model, turb_method>::print_field(integer step, int ngg) const {
         v.bv(-ngg, -ngg, -ngg, 0), v.bv(-ngg, -ngg, -ngg, 1), v.bv(-ngg, -ngg, -ngg, 2),
         v.bv(-ngg, -ngg, -ngg, 3), v.bv(-ngg, -ngg, -ngg, 4), v.bv(-ngg, -ngg, -ngg, 5)
     };
-    for (int k = -ngg; k < mz + ngg; ++k) {
-      for (int j = -ngg; j < my + ngg; ++j) {
-        for (int i = -ngg; i < mx + ngg; ++i) {
-          for (int l = 0; l < 6; ++l) {
+    for (int l = 0; l < 6; ++l) {
+      for (int k = -ngg; k < mz + ngg; ++k) {
+        for (int j = -ngg; j < my + ngg; ++j) {
+          for (int i = -ngg; i < mx + ngg; ++i) {
             min_val[l] = std::min(min_val[l], v.bv(i, j, k, l));
             max_val[l] = std::max(max_val[l], v.bv(i, j, k, l));
           }
@@ -325,8 +330,8 @@ void Output<mix_model, turb_method>::print_field(integer step, int ngg) const {
         }
       }
     }
-    fclose(fp);
   }
+  fclose(fp);
 }
 
 //void write_str(const char *str, FILE *file);

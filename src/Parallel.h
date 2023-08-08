@@ -5,9 +5,9 @@ namespace cfd {
  * \brief The class controlling the MPI message of current simulation
  */
 class MpiParallel {
+public:
   /** \brief number of processes in current simulation */
   int n_proc{1};
-public:
   /** \brief The id of current process in all processes */
   int my_id{0};
   /** \brief if the current simulation is a parallel simulation */

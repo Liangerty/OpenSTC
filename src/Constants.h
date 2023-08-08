@@ -1,6 +1,5 @@
 #pragma once
 
-#include <limits>
 /**
  * \brief The physical constants used in our simulation
  *

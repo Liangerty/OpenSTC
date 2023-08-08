@@ -33,7 +33,7 @@ enum class CombModel{
 };
 
 template<MixtureModel T>
-constexpr bool is_mixture = true;
+inline constexpr bool is_mixture = true;
 
 template<>
-constexpr bool is_mixture<MixtureModel::Air> = false;
+inline constexpr bool is_mixture<MixtureModel::Air> = false;

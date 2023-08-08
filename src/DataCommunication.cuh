@@ -1,11 +1,9 @@
 #pragma once
-#include <cuda_runtime.h>
 #include "Define.h"
 #include <vector>
 #include "Mesh.h"
 
 namespace cfd{
-class Mesh;
 template<MixtureModel mix_model, TurbMethod turb_method>
 struct Field;
 

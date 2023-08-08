@@ -4,10 +4,11 @@
 
 #include "Define.h"
 #include "Field.h"
+#include "DParameter.h"
 #include "Thermo.cuh"
 #include "Constants.h"
 #include "Transport.cuh"
-#include "DParameter.h"
+#include "SST.cuh"
 
 namespace cfd {
 
@@ -73,11 +74,11 @@ __global__ void compute_cv_from_bv(DZone *zone, DParameter *param) {
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 __global__ void update_physical_properties(DZone *zone, DParameter *param) {
-  const integer ngg{zone->ngg}, mx{zone->mx}, my{zone->my}, mz{zone->mz};
-  integer i = (integer) (blockDim.x * blockIdx.x + threadIdx.x) - ngg;
-  integer j = (integer) (blockDim.y * blockIdx.y + threadIdx.y) - ngg;
-  integer k = (integer) (blockDim.z * blockIdx.z + threadIdx.z) - ngg;
-  if (i >= mx + ngg || j >= my + ngg || k >= mz + ngg) return;
+  const integer mx{zone->mx}, my{zone->my}, mz{zone->mz};
+  integer i = (integer) (blockDim.x * blockIdx.x + threadIdx.x) - 1;
+  integer j = (integer) (blockDim.y * blockIdx.y + threadIdx.y) - 1;
+  integer k = (integer) (blockDim.z * blockIdx.z + threadIdx.z) - 1;
+  if (i >= mx + 1 || j >= my + 1 || k >= mz + 1) return;
 
   const real temperature{zone->bv(i, j, k, 5)};
   if constexpr (mix_model != MixtureModel::Air) {
@@ -92,17 +93,47 @@ __global__ void update_physical_properties(DZone *zone, DParameter *param) {
       cv += yk(i, j, k, l) * (cp[l] - R_u / param->mw[l]);
     }
     mw = 1 / mw;
+    zone->cp(i, j, k) = cp_tot;
     zone->gamma(i, j, k) = cp_tot / cv;
     zone->acoustic_speed(i, j, k) = std::sqrt(zone->gamma(i, j, k) * R_u * temperature / mw);
     compute_transport_property(i, j, k, temperature, mw, cp, param, zone);
   } else {
     constexpr real c_temp{gamma_air * R_u / mw_air};
+    constexpr real cp{gamma_air * R_u / mw_air / (gamma_air - 1)};
     const real pr = param->Pr;
     zone->acoustic_speed(i, j, k) = std::sqrt(c_temp * temperature);
     zone->mul(i, j, k) = Sutherland(temperature);
-    zone->conductivity(i, j, k) = zone->mul(i, j, k) * c_temp / (gamma_air - 1) / pr;
+    zone->thermal_conductivity(i, j, k) = zone->mul(i, j, k) * cp / pr;
   }
   zone->mach(i, j, k) = zone->vel(i, j, k) / zone->acoustic_speed(i, j, k);
+}
+
+template<MixtureModel mix_model>
+__global__ void initialize_mut(DZone *zone, DParameter *param) {
+  const integer mx{zone->mx}, my{zone->my}, mz{zone->mz};
+  integer i = (integer) (blockDim.x * blockIdx.x + threadIdx.x) - 1;
+  integer j = (integer) (blockDim.y * blockIdx.y + threadIdx.y) - 1;
+  integer k = (integer) (blockDim.z * blockIdx.z + threadIdx.z) - 1;
+  if (i >= mx + 1 || j >= my + 1 || k >= mz + 1) return;
+
+  switch (param->rans_model) {
+    case 1://SA
+      break;
+    case 2:
+    default: // SST
+      const real temperature{zone->bv(i, j, k, 5)};
+      real mul = Sutherland(temperature);
+      if constexpr (mix_model != MixtureModel::Air) {
+        auto &yk = zone->sv;
+        real mw{0};
+        for (auto l = 0; l < zone->n_spec; ++l) {
+          mw += yk(i, j, k, l) / param->mw[l];
+        }
+        mw = 1 / mw;
+        mul = compute_viscosity(i, j, k, temperature, mw, param, zone);
+      }
+      SST::compute_mut(zone, i, j, k, mul);
+  }
 }
 
 __device__ void compute_temperature(int i, int j, int k, const cfd::DParameter *param, cfd::DZone *zone);
@@ -138,7 +169,7 @@ __global__ void update_cv_and_bv(cfd::DZone *zone, DParameter *param) {
   auto &sv = zone->sv;
   if constexpr (mix_model != MixtureModel::Air ||
                 turb_method == TurbMethod::RANS) { // Flamelet method should be written independently.
-    // Multiple species or RANS methods, then there will be scalars to be computed
+    // For multiple species or RANS methods, there will be scalars to be computed
     for (integer l = 0; l < zone->n_scal; ++l) {
       sv(i, j, k, l) = cv(i, j, k, 5 + l) * density_inv;
     }
@@ -154,6 +185,4 @@ __global__ void update_cv_and_bv(cfd::DZone *zone, DParameter *param) {
 }
 
 __global__ void eliminate_k_gradient(cfd::DZone *zone);
-
-
 }

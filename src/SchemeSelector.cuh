@@ -39,7 +39,7 @@ compute_inviscid_flux(const Block &block, cfd::DZone *zone, DParameter *param, c
   const integer extent[3]{block.mx, block.my, block.mz};
   const integer ngg{block.ngg};
   const integer dim{extent[2] == 1 ? 2 : 3};
-  constexpr integer block_dim = 128;
+  constexpr integer block_dim = 64;
   const integer n_computation_per_block = block_dim + 2 * ngg - 1;
   const auto shared_mem = (block_dim * n_var // fc
                            + n_computation_per_block * (n_var + 3 + 1)) * sizeof(real); // pv[n_var]+metric[3]+jacobian
@@ -153,7 +153,7 @@ select_inviscid_scheme(DZone *zone, real *pv, integer tid, DParameter *param, re
   switch (inviscid_scheme) {
     case 2: // Roe
     case 3: // AUSM+
-    default:AUSMP_compute_inviscid_flux<mix_model,turb_method>(zone, pv, tid, param, fc, metric, jac);
+    default:AUSMP_compute_inviscid_flux<mix_model, turb_method>(zone, pv, tid, param, fc, metric, jac);
       break;
   }
 }
@@ -162,21 +162,21 @@ template<MixtureModel mix_model, TurbMethod turb_method>
 void compute_viscous_flux(const Block &block, cfd::DZone *zone, DParameter *param, integer n_var) {
   const integer extent[3]{block.mx, block.my, block.mz};
   const integer dim{extent[2] == 1 ? 2 : 3};
-  constexpr integer block_dim=64;
+  constexpr integer block_dim = 64;
 
-  dim3 tpb{block_dim,1,1};
-  dim3 bpg((extent[0]-1)/(block_dim-1)+1,extent[1],extent[2]);
-  auto shared_mem=block_dim*n_var* sizeof(real);
-  viscous_flux_fv<mix_model,turb_method><<<bpg, tpb, shared_mem>>>(zone, extent[0], param);
+  dim3 tpb{block_dim, 1, 1};
+  dim3 bpg((extent[0] - 1) / (block_dim - 1) + 1, extent[1], extent[2]);
+  auto shared_mem = block_dim * n_var * sizeof(real);
+  viscous_flux_fv<mix_model, turb_method><<<bpg, tpb, shared_mem>>>(zone, extent[0], param);
 
-  tpb={1,block_dim,1};
-  bpg=dim3(extent[0],(extent[1]-1)/(block_dim-1)+1,extent[2]);
-  viscous_flux_gv<mix_model,turb_method><<<bpg, tpb, shared_mem>>>(zone, extent[1], param);
+  tpb = {1, block_dim, 1};
+  bpg = dim3(extent[0], (extent[1] - 1) / (block_dim - 1) + 1, extent[2]);
+  viscous_flux_gv<mix_model, turb_method><<<bpg, tpb, shared_mem>>>(zone, extent[1], param);
 
-  if (dim==3){
-    tpb={1,1,block_dim};
-    bpg= dim3(extent[0],extent[1],(extent[2]-1)/(block_dim-1)+1);
-    viscous_flux_hv<mix_model,turb_method><<<bpg, tpb, shared_mem>>>(zone, extent[2], param);
+  if (dim == 3) {
+    tpb = {1, 1, block_dim};
+    bpg = dim3(extent[0], extent[1], (extent[2] - 1) / (block_dim - 1) + 1);
+    viscous_flux_hv<mix_model, turb_method><<<bpg, tpb, shared_mem>>>(zone, extent[2], param);
   }
 }
 
@@ -184,28 +184,29 @@ template<MixtureModel mix_model, TurbMethod turb_method>
 __global__ void
 viscous_flux_fv(cfd::DZone *zone, integer max_extent, cfd::DParameter *param) {
   integer idx[3];
-  idx[0] = ((integer) blockDim.x - 1) * blockIdx.x + threadIdx.x-1;
+  idx[0] = ((integer) blockDim.x - 1) * blockIdx.x + threadIdx.x - 1;
   idx[1] = (integer) (blockDim.y * blockIdx.y + threadIdx.y);
   idx[2] = (integer) (blockDim.z * blockIdx.z + threadIdx.z);
   if (idx[0] >= max_extent) return;
-  const auto tid=threadIdx.x;
+  const auto tid = threadIdx.x;
   const auto n_var{zone->n_var};
 
   extern __shared__ real s[];
-  real* fv=s;
+  real *fv = s;
 
   switch (param->viscous_scheme) {
     case 0: // Inviscid computation
       break;
     case 2:
     default: // 2nd order central difference
-      compute_fv_2nd_order<mix_model,turb_method>(idx,zone,&fv[tid*n_var],param);
+      compute_fv_2nd_order<mix_model, turb_method>(idx, zone, &fv[tid * n_var], param);
   }
   __syncthreads();
 
-  if (tid>0){
-    for (integer l=0;l<n_var;++l)
-      zone->dq(idx[0],idx[1],idx[2],l)+=fv[tid*n_var+l]-fv[(tid-1)*n_var+l];
+  if (tid > 0) {
+    for (integer l = 0; l < n_var; ++l) {
+      zone->dq(idx[0], idx[1], idx[2], l) += fv[tid * n_var + l] - fv[(tid - 1) * n_var + l];
+    }
   }
 }
 
@@ -213,27 +214,28 @@ template<MixtureModel mix_model, TurbMethod turb_method>
 __global__ void viscous_flux_gv(cfd::DZone *zone, integer max_extent, cfd::DParameter *param) {
   integer idx[3];
   idx[0] = (integer) (blockDim.x * blockIdx.x + threadIdx.x);
-  idx[1] = (integer)((blockDim.y - 1) * blockIdx.y + threadIdx.y)-1;
+  idx[1] = (integer) ((blockDim.y - 1) * blockIdx.y + threadIdx.y) - 1;
   idx[2] = (integer) (blockDim.z * blockIdx.z + threadIdx.z);
   if (idx[1] >= max_extent) return;
-  const auto tid=threadIdx.y;
+  const auto tid = threadIdx.y;
   const auto n_var{zone->n_var};
 
   extern __shared__ real s[];
-  real* gv=s;
+  real *gv = s;
 
   switch (param->viscous_scheme) {
     case 0: // Inviscid computation
       break;
     case 2:
     default: // 2nd order central difference
-      compute_gv_2nd_order<mix_model,turb_method>(idx,zone,&gv[tid*n_var],param);
+      compute_gv_2nd_order<mix_model, turb_method>(idx, zone, &gv[tid * n_var], param);
   }
   __syncthreads();
 
-  if (tid>0){
-    for (integer l=0;l<n_var;++l)
-      zone->dq(idx[0],idx[1],idx[2],l)+=gv[tid*n_var+l]-gv[(tid-1)*n_var+l];
+  if (tid > 0) {
+    for (integer l = 0; l < n_var; ++l) {
+      zone->dq(idx[0], idx[1], idx[2], l) += gv[tid * n_var + l] - gv[(tid - 1) * n_var + l];
+    }
   }
 }
 
@@ -242,26 +244,27 @@ __global__ void viscous_flux_hv(cfd::DZone *zone, integer max_extent, cfd::DPara
   integer idx[3];
   idx[0] = (integer) (blockDim.x * blockIdx.x + threadIdx.x);
   idx[1] = (integer) (blockDim.y * blockIdx.y + threadIdx.y);
-  idx[2] = (integer)((blockDim.z - 1) * blockIdx.z + threadIdx.z)-1;
+  idx[2] = (integer) ((blockDim.z - 1) * blockIdx.z + threadIdx.z) - 1;
   if (idx[2] >= max_extent) return;
-  const auto tid=threadIdx.z;
+  const auto tid = threadIdx.z;
   const auto n_var{zone->n_var};
 
   extern __shared__ real s[];
-  real* hv=s;
+  real *hv = s;
 
   switch (param->viscous_scheme) {
     case 0: // Inviscid computation
       break;
     case 2:
     default: // 2nd order central difference
-      compute_hv_2nd_order<mix_model,turb_method>(idx,zone,&hv[tid*n_var],param);
+      compute_hv_2nd_order<mix_model, turb_method>(idx, zone, &hv[tid * n_var], param);
   }
   __syncthreads();
 
-  if (tid>0){
-    for (integer l=0;l<n_var;++l)
-      zone->dq(idx[0],idx[1],idx[2],l)+=hv[tid*n_var+l]-hv[(tid-1)*n_var+l];
+  if (tid > 0) {
+    for (integer l = 0; l < n_var; ++l) {
+      zone->dq(idx[0], idx[1], idx[2], l) += hv[tid * n_var + l] - hv[(tid - 1) * n_var + l];
+    }
   }
 }
 

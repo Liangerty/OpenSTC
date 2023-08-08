@@ -7,7 +7,6 @@
 #include <filesystem>
 #include "gxl_lib/MyString.h"
 
-
 namespace cfd {
 class Mesh;
 
@@ -31,13 +30,17 @@ void read_flowfield(Parameter &parameter, const Mesh &mesh, std::vector<Field<mi
  */
 template<MixtureModel mix_model, TurbMethod turb_method>
 std::vector<integer>
-identify_variable_labels(std::vector<std::string> &var_name, Species &species, Parameter &parameter,
+identify_variable_labels(cfd::Parameter &parameter, std::vector<std::string> &var_name, Species &species,
                          std::array<integer, 2> &old_data_info);
 
 void read_one_useless_variable(FILE *fp, integer mx, integer my, integer mz, integer data_format);
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 void initialize_spec_from_inflow(cfd::Parameter &parameter, const cfd::Mesh &mesh,
+                                 std::vector<Field<mix_model, turb_method>> &field, Species &species);
+
+template<MixtureModel mix_model, TurbMethod turb_method>
+void initialize_turb_from_inflow(cfd::Parameter &parameter, const cfd::Mesh &mesh,
                                  std::vector<Field<mix_model, turb_method>> &field, Species &species);
 
 // Implementations
@@ -64,14 +67,14 @@ initialize_from_start(Parameter &parameter, const Mesh &mesh, std::vector<Field<
   const integer tot_group{parameter.get_int("groups_init")};
   std::vector<Inflow<mix_model, turb_method>> groups_inflow;
   const std::string default_init = parameter.get_string("default_init");
-  Inflow<mix_model, turb_method> default_inflow(parameter.get_struct(default_init), species);
+//  Inflow<mix_model, turb_method> default_inflow(parameter.get_struct(default_init), species, parameter);
+  Inflow<mix_model, turb_method> default_inflow(default_init, species, parameter);
   groups_inflow.push_back(default_inflow);
 
   std::vector<real> xs{}, xe{}, ys{}, ye{}, zs{}, ze{};
   if (tot_group > 1) {
     for (integer l = 0; l < tot_group - 1; ++l) {
       auto patch_struct_name = "init_cond_" + std::to_string(l);
-//      auto patch_struct_name{fmt::format("init_cond_{}",l)};
       auto &patch_cond = parameter.get_struct(patch_struct_name);
       xs.push_back(std::get<real>(patch_cond.at("x0")));
       xe.push_back(std::get<real>(patch_cond.at("x1")));
@@ -80,9 +83,9 @@ initialize_from_start(Parameter &parameter, const Mesh &mesh, std::vector<Field<
       zs.push_back(std::get<real>(patch_cond.at("z0")));
       ze.push_back(std::get<real>(patch_cond.at("z1")));
       if (patch_cond.find("label") != patch_cond.cend()) {
-        groups_inflow.emplace_back(parameter.get_struct(std::get<std::string>(patch_cond.at("label"))), species);
+        groups_inflow.emplace_back(std::get<std::string>(patch_cond.at("label")), species, parameter);
       } else {
-        groups_inflow.emplace_back(parameter.get_struct(patch_struct_name), species);
+        groups_inflow.emplace_back(patch_struct_name, species, parameter);
       }
     }
   }
@@ -109,7 +112,11 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
   if (!exists(out_dir)) {
     printf("The directory to flowfield files does not exist!\n");
   }
-  FILE *fp = fopen((out_dir.string() + std::format("/flowfield{:>4}.plt", parameter.get_int("myid"))).c_str(), "rb");
+  char id[5];
+  sprintf(id, "%4d", parameter.get_int("myid"));
+  std::string id_str = id;
+  FILE *fp = fopen((out_dir.string() + "/flowfield" + id_str + ".plt").c_str(), "rb");
+//  FILE *fp = fopen((out_dir.string() + std::format("/flowfield{:>4}.plt", parameter.get_int("myid"))).c_str(), "rb");
 
   std::string magic_number;
   fread(magic_number.data(), 8, 1, fp);
@@ -127,10 +134,11 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
   }
   // The first one tells if species info exists, if exists (1), else, (0).
   // The 2nd one tells if turbulent var exists, if 0 (compute from laminar), 1(From SA), 2(From SST)
-  std::array old_data_info{0,0};//,0
-  auto index_order = cfd::identify_variable_labels<mix_model, turb_method>(var_name, species, parameter,
+  std::array old_data_info{0, 0};//,0
+  auto index_order = cfd::identify_variable_labels<mix_model, turb_method>(parameter, var_name, species,
                                                                            old_data_info);
   const integer n_spec{species.n_spec};
+  const integer n_turb{parameter.get_int("n_turb")};
 
   float marker{0.0f};
   constexpr float eoh_marker{357.0f};
@@ -234,9 +242,9 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
           }
         }
       } else if (index < 6 + n_spec) {
-        // If air, n_spec=0, this part will not cause any influence
+        // If air, n_spec=0;
         // species variables
-        auto &yk = field[b].sv;
+        auto &sv = field[b].sv;
         index -= 6;
         if (data_format == 1) {
           // float storage
@@ -245,7 +253,7 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
             for (int j = 0; j < my; ++j) {
               for (int i = 0; i < mx; ++i) {
                 fread(&v, data_size, 1, fp);
-                yk(i, j, k, index) = v;
+                sv(i, j, k, index) = v;
               }
             }
           }
@@ -254,14 +262,46 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
           for (int k = 0; k < mz; ++k) {
             for (int j = 0; j < my; ++j) {
               for (int i = 0; i < mx; ++i) {
-                fread(&yk(i, j, k, index), data_size, 1, fp);
+                fread(&sv(i, j, k, index), data_size, 1, fp);
               }
             }
           }
         }
-      } else if (index == 6 + n_spec) {
-        // Other variables, such as, turbulent variables et, al.
-        // Each one has a independent label...
+      } else if (index < 6 + n_spec + n_turb) {
+        // If laminar, n_turb=0
+        // turbulent variables
+        auto &sv = field[b].sv;
+        index -= 6;
+        if (n_turb == old_data_info[1]) {
+          // SA from SA or SST from SST
+          if (data_format == 1) {
+            // float storage
+            float v{0.0f};
+            for (int k = 0; k < mz; ++k) {
+              for (int j = 0; j < my; ++j) {
+                for (int i = 0; i < mx; ++i) {
+                  fread(&v, data_size, 1, fp);
+                  sv(i, j, k, index) = v;
+                }
+              }
+            }
+          } else {
+            // double storage
+            for (int k = 0; k < mz; ++k) {
+              for (int j = 0; j < my; ++j) {
+                for (int i = 0; i < mx; ++i) {
+                  fread(&sv(i, j, k, index), data_size, 1, fp);
+                }
+              }
+            }
+          }
+        } else if (n_turb == 1 && old_data_info[1] == 2) {
+          // SA from SST. Currently, just use freestream value to intialize. Modify this later when I write SA
+          old_data_info[1] = 0;
+        } else if (n_turb == 2 && old_data_info[1] == 1) {
+          // SST from SA. As ACANS has done, the turbulent variables are intialized from freestream value
+          old_data_info[1] = 0;
+        }
       } else {
         // No matched label, just ignore
         read_one_useless_variable(fp, mx, my, mz, data_format);
@@ -272,16 +312,13 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
   // Next, if the previous simulation does not contain some of the variables used in the current simulation,
   // then we initialize them here
   if constexpr (mix_model != MixtureModel::Air) {
-//    constexpr integer index_spec_start{6};
-//    const integer index_spec_end{6 + n_spec};
-//    bool has_spec_info{false};
-//    for (auto ii: index_order) {
-//      if (ii >= index_spec_start && ii < index_spec_end) {
-//        has_spec_info = true;
-//      }
-//    }
-    if (old_data_info[0]==0) {
+    if (old_data_info[0] == 0) {
       initialize_spec_from_inflow(parameter, mesh, field, species);
+    }
+  }
+  if constexpr (turb_method == TurbMethod::RANS) {
+    if (old_data_info[1] == 0) {
+      initialize_turb_from_inflow(parameter, mesh, field, species);
     }
   }
 
@@ -292,10 +329,11 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 std::vector<integer>
-identify_variable_labels(std::vector<std::string> &var_name, Species &species, Parameter &parameter,
+identify_variable_labels(cfd::Parameter &parameter, std::vector<std::string> &var_name, Species &species,
                          std::array<integer, 2> &old_data_info) {
   std::vector<integer> labels;
   const integer n_spec = species.n_spec;
+  const integer n_turb = parameter.get_int("n_turb");
   for (auto &name: var_name) {
     integer l = 999;
     // The first three names are x, y and z, they are assigned value 0 and no match would be found.
@@ -312,35 +350,35 @@ identify_variable_labels(std::vector<std::string> &var_name, Species &species, P
       l = 4;
     } else if (n == "T" || n == "TEMPERATURE") {
       l = 5;
-    } /*else if (n == "MUT") { // To be determined
-      l = 6 + n_spec;
-    }  else if (n == "MIXTURE FRACTION") { // mixture fraction
-      l = 6 + n_spec + 2;
-    } else if (n == "Z PRIME") { // fluctuation of mixture fraction
-      l = 6 + n_spec + 3;
-    }*/else {
-      if constexpr (mix_model!=MixtureModel::Air){
+    } else {
+      if constexpr (mix_model != MixtureModel::Air) {
         // We expect to find some species info. If not found, old_data_info[0] will remain 0.
         const auto &spec_name = species.spec_list;
         for (auto [spec, sp_label]: spec_name) {
           if (n == gxl::to_upper(spec)) {
             l = 6 + sp_label;
-            old_data_info[0]=1;
+            old_data_info[0] = 1;
             break;
           }
         }
       }
-      if constexpr (turb_method==TurbMethod::RANS){
+      if constexpr (turb_method == TurbMethod::RANS) {
         // We expect to find some RANS variables. If not found, old_data_info[1] will remain 0.
-        if (n == "K"){ // turbulent kinetic energy
-          l = 6 + n_spec;
-          old_data_info[1]=2; // SST model in previous simulation
-        }else if (n == "OMEGA") { // specific dissipation rate
-          l = 6 + n_spec + 1;
-          old_data_info[1]=2; // SST model in previous simulation
+        if (n == "K" || n == "TKE") { // turbulent kinetic energy
+          if (n_turb == 2) {
+            l = 6 + n_spec;
+          }
+          old_data_info[1] = 2; // SST model in previous simulation
+        } else if (n == "OMEGA") { // specific dissipation rate
+          if (n_turb == 2) {
+            l = 6 + n_spec + 1;
+          }
+          old_data_info[1] = 2; // SST model in previous simulation
         } else if (n == "NUT SA") { // the variable from SA, not named yet!!!
-          l = 6 + n_spec;
-          old_data_info[1]=1; // SA model in previous simulation
+          if (n_turb == 1) {
+            l = 6 + n_spec;
+          }
+          old_data_info[1] = 1; // SA model in previous simulation
         }
       }
     }
@@ -360,11 +398,11 @@ void initialize_spec_from_inflow(cfd::Parameter &parameter, const cfd::Mesh &mes
   // then we implement it just by copying the previous function "initialize_from_start",
   // which should be easy.
   const std::string default_init = parameter.get_string("default_init");
-  Inflow<mix_model, turb_method> inflow(parameter.get_struct(default_init), species);
+  Inflow<mix_model, turb_method> inflow(default_init, species, parameter);
   for (int blk = 0; blk < mesh.n_block; ++blk) {
     const integer mx{mesh[blk].mx}, my{mesh[blk].my}, mz{mesh[blk].mz};
     const auto n_spec = parameter.get_int("n_spec");
-    auto mass_frac = inflow.yk;
+    auto mass_frac = inflow.sv;
     auto &yk = field[blk].sv;
     for (int k = 0; k < mz; ++k) {
       for (int j = 0; j < my; ++j) {
@@ -378,6 +416,36 @@ void initialize_spec_from_inflow(cfd::Parameter &parameter, const cfd::Mesh &mes
   }
   if (parameter.get_int("myid") == 0) {
     printf("Compute from single species result. The species field is initialized with freestream.\n");
+  }
+}
+
+template<MixtureModel mix_model, TurbMethod turb_method>
+void initialize_turb_from_inflow(cfd::Parameter &parameter, const cfd::Mesh &mesh,
+                                 std::vector<Field<mix_model, turb_method>> &field, Species &species) {
+  // This can also be implemented like the from_start one, which can have patch.
+  // But currently, for easy to implement, just intialize the whole flowfield to the main inflow turbulent state.
+  // If the need for initialize turbulence in groups is strong,
+  // then we implement it just by copying the previous function "initialize_from_start",
+  // which should be easy.
+  const std::string default_init = parameter.get_string("default_init");
+  Inflow<mix_model, turb_method> inflow(default_init, species, parameter);
+  const auto n_turb = parameter.get_int("n_turb");
+  const auto n_spec = parameter.get_int("n_spec");
+  for (int blk = 0; blk < mesh.n_block; ++blk) {
+    const integer mx{mesh[blk].mx}, my{mesh[blk].my}, mz{mesh[blk].mz};
+    auto &sv = field[blk].sv;
+    for (int k = 0; k < mz; ++k) {
+      for (int j = 0; j < my; ++j) {
+        for (int i = 0; i < mx; ++i) {
+          for (integer l = 0; l < n_turb; ++l) {
+            sv(i, j, k, n_spec + l) = inflow.sv[n_spec + l];
+          }
+        }
+      }
+    }
+  }
+  if (parameter.get_int("myid") == 0) {
+    printf("Compute from laminar result. The turbulent field is initialized with freestream.\n");
   }
 }
 }
