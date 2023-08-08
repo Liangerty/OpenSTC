@@ -136,8 +136,6 @@ __global__ void initialize_mut(DZone *zone, DParameter *param) {
   }
 }
 
-__device__ void compute_temperature(int i, int j, int k, const cfd::DParameter *param, cfd::DZone *zone);
-
 template<MixtureModel mix_model, TurbMethod turb_method>
 __global__ void update_cv_and_bv(cfd::DZone *zone, DParameter *param) {
   const integer extent[3]{zone->mx, zone->my, zone->mz};
@@ -155,6 +153,38 @@ __global__ void update_cv_and_bv(cfd::DZone *zone, DParameter *param) {
   if (extent[2] == 1) {
     cv(i, j, k, 3) = 0;
   }
+
+  auto &bv = zone->bv;
+  auto &velocity = zone->vel(i, j, k);
+
+  bv(i, j, k, 0) = cv(i, j, k, 0);
+  const real density_inv = 1.0 / cv(i, j, k, 0);
+  bv(i, j, k, 1) = cv(i, j, k, 1) * density_inv;
+  bv(i, j, k, 2) = cv(i, j, k, 2) * density_inv;
+  bv(i, j, k, 3) = cv(i, j, k, 3) * density_inv;
+  velocity = bv(i, j, k, 1) * bv(i, j, k, 1) + bv(i, j, k, 2) * bv(i, j, k, 2) + bv(i, j, k, 3) * bv(i, j, k, 3); //V^2
+
+  auto &sv = zone->sv;
+  if constexpr (mix_model != MixtureModel::Air ||
+                turb_method == TurbMethod::RANS) { // Flamelet method should be written independently.
+    // For multiple species or RANS methods, there will be scalars to be computed
+    for (integer l = 0; l < zone->n_scal; ++l) {
+      sv(i, j, k, l) = cv(i, j, k, 5 + l) * density_inv;
+    }
+  }
+  if constexpr (mix_model != MixtureModel::Air) {
+    compute_temperature(i, j, k, param, zone);
+  } else {
+    // Air
+    bv(i, j, k, 4) = (gamma_air - 1) * (cv(i, j, k, 4) - 0.5 * bv(i, j, k, 0) * velocity);
+    bv(i, j, k, 5) = bv(i, j, k, 4) * mw_air * density_inv / R_u;
+  }
+  velocity = std::sqrt(velocity);
+}
+
+template<MixtureModel mix_model, TurbMethod turb_method>
+__device__ void update_bv_1_point(cfd::DZone *zone, DParameter *param, integer i, integer j, integer k) {
+  auto &cv = zone->cv;
 
   auto &bv = zone->bv;
   auto &velocity = zone->vel(i, j, k);

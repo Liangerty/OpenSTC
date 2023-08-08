@@ -33,5 +33,8 @@ public:
   static void exit();
 
   ~MpiParallel();
+
+private:
+  void setup_gpu_device() const;
 };
 }

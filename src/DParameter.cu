@@ -1,47 +1,13 @@
 #include "DParameter.h"
 #include "ChemData.h"
 
-cfd::DParameter::DParameter(cfd::Parameter &parameter, Species &species, Reaction &reaction) : myid{
-    parameter.get_int("myid")},
-    /*dim{parameter.get_int("dimension")},
-    n_block(parameter.get_int("n_block")),*/
-                                                                                               inviscid_scheme{
-                                                                                                   parameter.get_int(
-                                                                                                       "inviscid_scheme")},
-                                                                                               reconstruction{
-                                                                                                   parameter.get_int(
-                                                                                                       "reconstruction")},
-                                                                                               limiter{
-                                                                                                   parameter.get_int(
-                                                                                                       "limiter")},
-                                                                                               viscous_scheme{
-                                                                                                   parameter.get_int(
-                                                                                                       "viscous_order")},
-                                                                                               rans_model{
-                                                                                                   parameter.get_int(
-                                                                                                       "RANS_model")},
-                                                                                               turb_implicit{
-                                                                                                   parameter.get_int(
-                                                                                                       "turb_implicit")},
-                                                                                               implicit_method{
-                                                                                                   parameter.get_int(
-                                                                                                       "implicit_method")},
-                                                                                               DPLUR_inner_step{
-                                                                                                   parameter.get_int(
-                                                                                                       "DPLUR_inner_step")},
-                                                                                               chemSrcMethod{
-                                                                                                   parameter.get_int(
-                                                                                                       "chemSrcMethod")},
-    /*output_screen(
-        parameter.get_int("output_screen")),*/
-                                                                                               Pr(parameter.get_real(
-                                                                                                   "prandtl_number")),
-                                                                                               cfl(parameter.get_real(
-                                                                                                   "cfl")),
-                                                                                               Prt(parameter.get_real(
-                                                                                                   "turbulent_prandtl_number")),
-                                                                                               Sct(parameter.get_real(
-                                                                                                   "turbulent_schmidt_number")) {
+cfd::DParameter::DParameter(cfd::Parameter &parameter, Species &species, Reaction &reaction) :
+    myid{parameter.get_int("myid")}, inviscid_scheme{parameter.get_int("inviscid_scheme")},
+    reconstruction{parameter.get_int("reconstruction")}, limiter{parameter.get_int("limiter")},
+    viscous_scheme{parameter.get_int("viscous_order")}, rans_model{parameter.get_int("RANS_model")},
+    turb_implicit{parameter.get_int("turb_implicit")}, chemSrcMethod{parameter.get_int("chemSrcMethod")},
+    Pr(parameter.get_real("prandtl_number")), cfl(parameter.get_real("cfl")),
+    Prt(parameter.get_real("turbulent_prandtl_number")), Sct(parameter.get_real("turbulent_schmidt_number")) {
   const auto &spec = species;
   n_spec = spec.n_spec;
   n_scalar = parameter.get_int("n_scalar");

@@ -14,9 +14,9 @@ list(APPEND src_file
   Field.h Field.cu FieldOperation.cuh FieldOperation.cu
   ImplicitTreatmentHPP.cuh Initialize.cuh Initialize.cu InviscidScheme.cuh
   Limiter.cuh
-  main.cu Mesh.h Mesh.cpp
+  main.cu Mesh.h Mesh.cpp MPIIO.hpp MPIIO.cu
   Output.hpp
-  Parallel.h Parallel.cpp Parameter.h Parameter.cpp PostProcess.h PostProcess.cu
+  Parallel.h Parallel.cpp Parallel.cu Parameter.h Parameter.cpp PostProcess.h PostProcess.cu
   Reconstruction.cu Reconstruction.cuh
   SchemeSelector.cuh SourceTerm.cuh SST.cuh SST.cu
   Transport.cuh Transport.cu TimeAdvanceFunc.cu TimeAdvanceFunc.cuh Thermo.cuh Thermo.cu

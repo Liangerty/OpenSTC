@@ -4,11 +4,12 @@
 template<MixtureModel mix_model, TurbMethod turb_method>
 cfd::Field<mix_model, turb_method>::Field(Parameter &parameter, const Block &block_in): block(block_in) {
   const integer mx{block.mx}, my{block.my}, mz{block.mz}, ngg{block.ngg};
-  const integer n_var{parameter.get_int("n_var")};
+//  const integer n_var{parameter.get_int("n_var")};
+  n_var = parameter.get_int("n_var");
   integer n_scalar{0};
   integer n_other_var{1}; // Default, mach number
 
-  cv.resize(mx, my, mz, n_var, ngg);
+//  cv.resize(mx, my, mz, n_var, ngg);
   bv.resize(mx, my, mz, 6, ngg);
   if constexpr (mix_model == MixtureModel::Mixture) {
     n_scalar += parameter.get_int("n_spec");
@@ -23,7 +24,7 @@ cfd::Field<mix_model, turb_method>::Field(Parameter &parameter, const Block &blo
   }
   sv.resize(mx, my, mz, n_scalar, ngg);
   ov.resize(mx, my, mz, n_other_var, ngg);
-  var_without_ghost_grid.resize(mx, my, mz, 1, 0); // Only to have wall_dist, if more are needed, then add nl.
+//  var_without_ghost_grid.resize(mx, my, mz, 1, 0); // Only to have wall_dist, if more are needed, then add nl.
 }
 
 template<MixtureModel mix_model, TurbMethod turb_method>
@@ -115,8 +116,6 @@ void cfd::Field<mix_model, turb_method>::setup_device_memory(const Parameter &pa
   h_ptr->bv.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, 6, h_ptr->ngg);
   cudaMemcpy(h_ptr->bv.data(), bv.data(), sizeof(real) * h_ptr->bv.size() * 6, cudaMemcpyHostToDevice);
   h_ptr->bv_last.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, 4, 0);
-//  h_ptr->bv_last.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, 6, h_ptr->ngg);
-//  h_ptr->residual.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, 4, 0);
   h_ptr->vel.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
   h_ptr->acoustic_speed.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
   h_ptr->mach.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);

@@ -14,26 +14,11 @@
 #include "ImplicitTreatmentHPP.cuh"
 
 namespace cfd {
-// Instantiate all possible drivers
-template
-struct Driver<MixtureModel::Air, TurbMethod::Laminar>;
-template
-struct Driver<MixtureModel::Air, TurbMethod::RANS>;
-template
-struct Driver<MixtureModel::Mixture, TurbMethod::Laminar>;
-template
-struct Driver<MixtureModel::Mixture, TurbMethod::RANS>;
-template
-struct Driver<MixtureModel::FR, TurbMethod::Laminar>;
-template
-struct Driver<MixtureModel::FR, TurbMethod::RANS>;
-
 
 template<MixtureModel mix_model, TurbMethod turb_method>
-Driver<mix_model, turb_method>::Driver(Parameter &parameter, Mesh &mesh_):myid(parameter.get_int("myid")), time(),
-                                                                          mesh(mesh_), parameter(parameter),
-                                                                          spec(parameter), reac(parameter),
-                                                                          output(myid, mesh_, field, parameter, spec) {
+Driver<mix_model, turb_method>::Driver(Parameter &parameter, Mesh &mesh_):
+    myid(parameter.get_int("myid")), time(), mesh(mesh_), parameter(parameter),
+    spec(parameter), reac(parameter) {
   // Allocate the memory for every block
   for (integer blk = 0; blk < mesh.n_block; ++blk) {
     field.emplace_back(parameter, mesh[blk]);
@@ -47,7 +32,6 @@ Driver<mix_model, turb_method>::Driver(Parameter &parameter, Mesh &mesh_):myid(p
     res_scale_in >> res_scale[0] >> res_scale[1] >> res_scale[2] >> res_scale[3];
     res_scale_in.close();
   }
-
 #ifdef GPU
   for (integer blk = 0; blk < mesh.n_block; ++blk) {
     field[blk].setup_device_memory(parameter);
@@ -79,7 +63,7 @@ void Driver<mix_model, turb_method>::initialize_computation() {
     for (auto b = 0; b < mesh.n_block; ++b) {
       const auto mx{mesh[b].mx}, my{mesh[b].my};
       dim3 BPG{(mx + ng_1) / tpb.x + 1, (my + ng_1) / tpb.y + 1, 1};
-      eliminate_k_gradient <<<BPG, tpb >>> (field[b].d_ptr);
+      eliminate_k_gradient <<<BPG, tpb >>>(field[b].d_ptr);
     }
   }
 
@@ -91,13 +75,6 @@ void Driver<mix_model, turb_method>::initialize_computation() {
     printf("Boundary conditions are applied successfully for initialization\n");
   }
 
-  // Third, communicate values between processes
-  data_communication<mix_model, turb_method>(mesh, field);
-  // Currently not implemented, thus the current program can only be used on a single GPU
-
-  if (myid == 0) {
-    printf("Finish data transfer.\n");
-  }
 
   // First, compute the conservative variables from basic variables
   for (auto i = 0; i < mesh.n_block; ++i) {
@@ -110,7 +87,13 @@ void Driver<mix_model, turb_method>::initialize_computation() {
     }
   }
   cudaDeviceSynchronize();
+  // Third, communicate values between processes
+  data_communication<mix_model, turb_method>(mesh, field, parameter, 0, param);
 
+  if (myid == 0) {
+    printf("Finish data transfer.\n");
+  }
+  cudaDeviceSynchronize();
 
   for (auto b = 0; b < mesh.n_block; ++b) {
     integer mx{mesh[b].mx}, my{mesh[b].my}, mz{mesh[b].mz};
@@ -168,10 +151,10 @@ void Driver<mix_model, turb_method>::acquire_wall_distance() {
       }
     }
     const integer n_proc{parameter.get_int("n_proc")};
-    integer *n_wall_point = new integer[n_proc];
-    integer n_wall_this = static_cast<integer>(wall_coor.size());
+    auto *n_wall_point = new integer[n_proc];
+    auto n_wall_this = static_cast<integer>(wall_coor.size());
     MPI_Allgather(&n_wall_this, 1, MPI_INT, n_wall_point, 1, MPI_INT, MPI_COMM_WORLD);
-    integer *disp = new integer[n_proc];
+    auto *disp = new integer[n_proc];
     disp[0] = 0;
     for (integer i = 1; i < n_proc; ++i) {
       disp[i] = disp[i - 1] + n_wall_point[i - 1];
@@ -181,11 +164,15 @@ void Driver<mix_model, turb_method>::acquire_wall_distance() {
       total_wall_number += n_wall_point[i];
     }
     std::vector<real> wall_points(total_wall_number, 0);
+    // NOTE: The MPI process here is not examined carefully, if there are mistakes or things hard to understand, examine here.
     MPI_Allgatherv(wall_coor.data(), n_wall_point[myid], MPI_DOUBLE, wall_points.data(), n_wall_point, disp, MPI_DOUBLE,
                    MPI_COMM_WORLD);
     real *wall_corr_gpu = nullptr;
     cudaMalloc(&wall_corr_gpu, total_wall_number * sizeof(real));
     cudaMemcpy(wall_corr_gpu, wall_points.data(), total_wall_number * sizeof(real), cudaMemcpyHostToDevice);
+    if (myid == 0) {
+      printf("Start computing wall distance.\n");
+    }
     for (integer blk = 0; blk < mesh.n_block; ++blk) {
       const integer ngg{mesh[0].ngg};
       const integer mx{mesh[blk].mx + 2 * ngg}, my{mesh[blk].my + 2 * ngg}, mz{mesh[blk].mz + 2 * ngg};
@@ -194,6 +181,7 @@ void Driver<mix_model, turb_method>::acquire_wall_distance() {
       compute_wall_distance<<<bpg, tpb>>>(wall_corr_gpu, field[blk].d_ptr, total_wall_number);
 //      cudaMemcpy(field[blk].var_without_ghost_grid.data(), field[blk].h_ptr->wall_distance.data(), field[blk].h_ptr->wall_distance.size()*sizeof(real),cudaMemcpyDeviceToHost);
     }
+    cudaDeviceSynchronize();
     if (myid == 0) {
       printf("Finish computing wall distance.\n");
     }
@@ -205,7 +193,9 @@ void Driver<mix_model, turb_method>::acquire_wall_distance() {
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 void Driver<mix_model, turb_method>::steady_simulation() {
-  printf("Steady flow simulation.\n");
+  if (myid == 0) {
+    printf("Steady flow simulation.\n");
+  }
   bool converged{false};
   integer step{parameter.get_int("step")};
   integer total_step{parameter.get_int("total_step") + step};
@@ -215,6 +205,8 @@ void Driver<mix_model, turb_method>::steady_simulation() {
   const integer ng_1 = 2 * ngg - 1;
   const integer output_screen = parameter.get_int("output_screen");
   const integer output_file = parameter.get_int("output_file");
+
+  MPIIO<mix_model, turb_method> mpiio(myid, mesh, field, parameter, spec, 0);
 
   dim3 tpb{8, 8, 4};
   if (mesh.dimension == 2) {
@@ -236,7 +228,6 @@ void Driver<mix_model, turb_method>::steady_simulation() {
     // First, store the value of last step
     if (step % output_screen == 0) {
       for (auto b = 0; b < n_block; ++b) {
-//        store_last_step(field[b].h_ptr);
         store_last_step<<<bpg[b], tpb>>>(field[b].d_ptr);
       }
     }
@@ -260,13 +251,13 @@ void Driver<mix_model, turb_method>::steady_simulation() {
       update_cv_and_bv<mix_model, turb_method><<<bpg[b], tpb>>>(field[b].d_ptr, param);
 
       // limit unphysical values computed by the program
-      limit_flow<<<bpg[b], tpb>>>(field[b].d_ptr,param,b);
+      limit_flow<<<bpg[b], tpb>>>(field[b].d_ptr, param, b);
 
       // apply boundary conditions
       bound_cond.apply_boundary_conditions(mesh[b], field[b], param);
     }
     // Third, transfer data between and within processes
-    data_communication(mesh, field);
+    data_communication<mix_model, turb_method>(mesh, field, parameter, step, param);
 
     if (mesh.dimension == 2) {
       for (auto b = 0; b < n_block; ++b) {
@@ -280,7 +271,6 @@ void Driver<mix_model, turb_method>::steady_simulation() {
     for (auto b = 0; b < n_block; ++b) {
       integer mx{mesh[b].mx}, my{mesh[b].my}, mz{mesh[b].mz};
       dim3 BPG{(mx + 1) / tpb.x + 1, (my + 1) / tpb.y + 1, (mz + 1) / tpb.z + 1};
-//      dim3 BPG{(mx + ng_1) / tpb.x + 1, (my + ng_1) / tpb.y + 1, (mz + ng_1) / tpb.z + 1};
       update_physical_properties<mix_model, turb_method><<<BPG, tpb>>>(field[b].d_ptr, param);
     }
 
@@ -294,7 +284,7 @@ void Driver<mix_model, turb_method>::steady_simulation() {
     }
     cudaDeviceSynchronize();
     if (step % output_file == 0 || converged) {
-      output.print_field(step);
+      mpiio.print_field(step);
 //      post_process();
     }
   }
@@ -342,6 +332,11 @@ real Driver<mix_model, turb_method>::compute_residual(integer step) {
 
   if (parameter.get_bool("parallel")) {
     // Parallel reduction
+    static std::array<double, 4> res_temp;
+    for (int i = 0; i < 4; ++i) {
+      res_temp[i] = res[i];
+    }
+    MPI_Allreduce(res_temp.data(), res.data(), 4, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
   }
   for (auto &e: res) {
     e = std::sqrt(e / mesh.n_grid_total);
@@ -358,9 +353,11 @@ real Driver<mix_model, turb_method>::compute_residual(integer step) {
     if (!exists(out_dir)) {
       create_directories(out_dir);
     }
-    std::ofstream res_scale_out(out_dir.string() + "/residual_scale.txt");
-    res_scale_out << res_scale[0] << '\n' << res_scale[1] << '\n' << res_scale[2] << '\n' << res_scale[3] << '\n';
-    res_scale_out.close();
+    if (myid == 0) {
+      std::ofstream res_scale_out(out_dir.string() + "/residual_scale.txt");
+      res_scale_out << res_scale[0] << '\n' << res_scale[1] << '\n' << res_scale[2] << '\n' << res_scale[3] << '\n';
+      res_scale_out.close();
+    }
   }
 
   for (integer i = 0; i < 4; ++i) {
@@ -477,4 +474,19 @@ __global__ void compute_wall_distance(const real *wall_point_coor, DZone *zone, 
   }
   wall_dist = std::sqrt(wall_dist);
 }
+
+// Instantiate all possible drivers
+template
+struct Driver<MixtureModel::Air, TurbMethod::Laminar>;
+template
+struct Driver<MixtureModel::Air, TurbMethod::RANS>;
+template
+struct Driver<MixtureModel::Mixture, TurbMethod::Laminar>;
+template
+struct Driver<MixtureModel::Mixture, TurbMethod::RANS>;
+template
+struct Driver<MixtureModel::FR, TurbMethod::Laminar>;
+template
+struct Driver<MixtureModel::FR, TurbMethod::RANS>;
+
 } // cfd

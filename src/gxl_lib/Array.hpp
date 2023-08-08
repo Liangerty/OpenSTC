@@ -1,7 +1,11 @@
 #pragma once
 #ifdef __CUDACC__
+
 #include <cuda_runtime.h>
+#include <cstdio>
+
 #endif
+
 #include <vector>
 
 enum class Major {
@@ -25,10 +29,11 @@ public:
   cudaError_t allocate_memory(int dim1, int dim2, int dim3, int n_ghost = 0);
 
   __device__ T &operator()(const int i, const int j, const int k) {
-    if constexpr (major == Major::ColMajor)
+    if constexpr (major == Major::ColMajor) {
       return val[k * disp1 + j * disp2 + i + dispt];
-    else
+    } else {
       return val[i * disp1 + j * disp2 + k + dispt];
+    }
   }
 
   __device__ const T &operator()(const int i, const int j, const int k) const {
@@ -91,9 +96,10 @@ public:
     }
   }
 
-  T* operator[](int l){
-    static_assert(major==Major::ColMajor);
-    return &val[l*sz];
+  T *operator[](int l) {
+    static_assert(major == Major::ColMajor);
+    return val + l * sz;
+//    return &val[l * sz];
   }
 
   T *data() { return val; }
@@ -121,6 +127,76 @@ VectorField3D<T, major>::allocate_memory(int dim1, int dim2, int dim3, int dim4,
   sz = (n1 + 2 * ng) * (n2 + 2 * ng) * (n3 + 2 * ng);
   cudaError_t err = cudaMalloc(&val, sz * n4 * sizeof(T));
   return err;
+}
+
+template<typename T, Major major = Major::ColMajor>
+class VectorField3DHost {
+  int disp2{0}, disp1{0}, dispt{0};
+  T *data_ = nullptr;
+  int ng{0}, n1{0}, n2{0}, n3{0}, n4{0}, sz{0};
+//  std::vector<T> data_;
+public:
+//  explicit VectorField3DHost(int dim1, int dim2, int dim3, int dim4, int n_ghost);
+
+  auto data() const { return data_; }
+//  auto data() const { return data_.data(); }
+
+  auto data() { return data_; }
+//  auto data() { return data_.data(); }
+
+  /**
+   * \brief Get the l-th variable at position (i,j,k)
+   * \param i x index
+   * \param j y index
+   * \param k z index
+   * \param l variable index in a vector
+   * \return the l-th variable at position (i,j,k)
+   */
+  T &operator()(const int i, const int j, const int k, const int l) {
+    if constexpr (major == Major::RowMajor) {
+      return data_[i * disp1 + j * disp2 + k * n4 + dispt + l];
+    } else {
+      return data_[k * disp1 + j * disp2 + i + dispt + l * sz];
+    }
+  }
+
+  T *operator[](int l) {
+    static_assert(major == Major::ColMajor);
+    return &data_[l * sz];
+  }
+
+  void resize(int ni, int nj, int nk, int nl, int ngg);
+
+  int n_var() const { return n4; }
+};
+
+template<typename T, Major major>
+void VectorField3DHost<T, major>::resize(int ni, int nj, int nk, int nl, int ngg) {
+  ng = ngg;
+  n1 = ni + 2 * ngg;
+  n2 = nj + 2 * ngg;
+  n3 = nk + 2 * ngg;
+  n4 = nl;
+  sz = n1 * n2 * n3;
+  if constexpr (major == Major::RowMajor) {
+    disp2 = n3 * n4;
+    disp1 = n2 * disp2;
+    dispt = (disp1 + disp2 + n4) * ng;
+  } else {
+    disp2 = n1;
+    disp1 = n2 * disp2;
+    dispt = (disp1 + disp2 + 1) * ng;
+  }
+  cudaError_t err = cudaHostAlloc(&data_, sz * n4 * sizeof(T), cudaHostAllocDefault);
+  if (err != cudaSuccess) {
+    printf(
+        "The VectorField3DHost isn't allocated by cudaHostAlloc, not enough page-locked memory. Use malloc instead\n");
+    data_ = (real *) malloc(sz * n4 * sizeof(T));
+  }
+//  data_.resize(n1 * n2 * n3 * n4, t);
+  n1 = ni;
+  n2 = nj;
+  n3 = nk;
 }
 
 }
@@ -237,6 +313,8 @@ public:
   }
 
   void resize(int ni, int nj, int nk, int nl, int ngg, T &&t = T{});
+
+  int n_var() const { return n4; }
 };
 
 template<typename T, Major major>

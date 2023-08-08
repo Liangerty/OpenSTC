@@ -8,7 +8,7 @@
 
 cfd::Species::Species(Parameter &parameter) {
   parameter.update_parameter("n_spec", 0);
-  if (parameter.get_bool("species")){
+  if (parameter.get_bool("species")) {
     std::ifstream comb_mech("./input_files/" + parameter.get_string("mechanism_file"));
     std::string input{}, key{};
     gxl::getline(comb_mech, input);  // Elements
@@ -35,7 +35,7 @@ cfd::Species::Species(Parameter &parameter) {
     gxl::getline(comb_mech, input);  //------------------
     parameter.update_parameter("n_spec", num_spec);
     parameter.update_parameter("n_var", parameter.get_int("n_var") + num_spec);
-    parameter.update_parameter("n_scalar",parameter.get_int("n_scalar")+num_spec);
+    parameter.update_parameter("n_scalar", parameter.get_int("n_scalar") + num_spec);
 
     counter = 0;
     while (gxl::getline_to_stream(comb_mech, input, line, gxl::Case::upper)) {
@@ -50,16 +50,18 @@ cfd::Species::Species(Parameter &parameter) {
     read_therm(parameter);
     read_tran(parameter);
 
-    fmt::print("Mixture composed of {} species will be simulated.\n", n_spec);
-    integer counter_spec{0};
-    for (auto &[name, label]: spec_list) {
-      fmt::print("{}\t", name);
-      ++counter_spec;
-      if (counter_spec % 10 == 0) {
-        fmt::print("\n");
+    if (parameter.get_int("myid") == 0) {
+      fmt::print("Mixture composed of {} species will be simulated.\n", n_spec);
+      integer counter_spec{0};
+      for (auto &[name, label]: spec_list) {
+        fmt::print("{}\t", name);
+        ++counter_spec;
+        if (counter_spec % 10 == 0) {
+          fmt::print("\n");
+        }
       }
+      fmt::print("\n");
     }
-    fmt::print("\n");
   }
 }
 

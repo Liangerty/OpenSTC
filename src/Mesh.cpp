@@ -187,60 +187,58 @@ cfd::ParallelFace::ParallelFace(integer x1, integer x2, integer y1, integer y2,
       flag_receive{flag_r} {}
 
 void cfd::ParallelFace::register_boundary(const integer dim, integer ngg) {
-  if (dim == 3) {
-    for (integer i = 0; i < dim; ++i) {
-      // if start==end, then it is the normal direction
-      if (range_start[i] == range_end[i]) {
-        face = i;
-        // if the same value is 1, it is the small label face, and the normal
-        // points to negative direction
-        if (range_start[i] == 1) direction = -1;
-        range_start[i] -= 1;
-        range_end[i] -= 1;
-        loop_order[0] = i;
-        loop_dir[0] = 0;
-      } else if (range_start[i] > 0) {
-        range_start[i] -= 1;
-        range_end[i] -= 1;
-        loop_order[1] = i;
-        loop_dir[1] = range_start[i] < range_end[i] ? 1 : -1;
-        range_start[i] -= loop_dir[i] * ngg;
-        range_end[i] += loop_dir[i] * ngg;
-      } else {
-        range_start[i] = -range_start[i] - 1;
-        range_end[i] = -range_end[i] - 1;
-        loop_order[2] = i;
-        loop_dir[2] = range_start[i] < range_end[i] ? 1 : -1;
-        range_start[i] -= loop_dir[i] * ngg;
-        range_end[i] += loop_dir[i] * ngg;
-      }
+  for (integer i = 0; i < dim; ++i) {
+    // if start==end, then it is the normal direction
+    if (range_start[i] == range_end[i]) {
+      face = i;
+      // if the same value is 1, it is the small label face, and the normal
+      // points to negative direction
+      if (range_start[i] == 1) direction = -1;
+      range_start[i] -= 1;
+      range_end[i] -= 1;
+      loop_order[0] = i;
+      loop_dir[0] = 0;
+      break;
     }
-  } else {
-    for (integer i = 0; i < dim; ++i) {
-      // if start==end, then it is the normal direction
-      if (range_start[i] == range_end[i]) {
-        face = i;
-        // if the same value is 1, it is the small label face, and the normal
-        // points to negative direction
-        if (range_start[i] == 1) direction = -1;
-        range_start[i] -= 1;
-        range_end[i] -= 1;
-        loop_order[0] = i;
-        loop_dir[0] = 0;
-        break;
-      }
-    }
+  }
+  if (dim == 2) {
     const integer next_face{1 - face};
     range_start[next_face] = std::abs(range_start[next_face]) - 1;
     range_end[next_face] = std::abs(range_end[next_face]) - 1;
     loop_order[1] = next_face;
     loop_dir[1] = range_start[next_face] < range_end[next_face] ? 1 : -1;
-    range_start[next_face] -= loop_dir[1] * ngg;
-    range_end[next_face] += loop_dir[1] * ngg;
-    range_start[2] = -ngg;
-    range_end[2] = ngg;
+    range_start[2] = 0;
+    range_end[2] = 0;
     loop_order[2] = 2;
-    loop_dir[2] = 1;
+    loop_dir[2] = 0;
+  } else {
+    integer next_face{0};
+    for (integer i = 0; i < dim; ++i) {
+      if (range_start[i] < 0) {
+        next_face = i;
+        range_start[i] = -range_start[i] - 1;
+        range_end[i] = -range_end[i] - 1;
+        loop_order[2] = i;
+        loop_dir[2] = range_start[i] < range_end[i] ? 1 : -1;
+        break;
+      }
+    }
+    next_face = 3 - face - next_face;
+    range_start[next_face] -= 1;
+    range_end[next_face] -= 1;
+    loop_order[1] = next_face;
+    loop_dir[1] = range_start[next_face] < range_end[next_face] ? 1 : -1;
+  }
+  // Include the corner into the transfer
+  // Commented
+//  for (integer i = 0; i < 3; ++i) {
+//    if (i != face) {
+//      range_start[i] -= loop_dir[i] * ngg;
+//      range_end[i] += loop_dir[i] * ngg;
+//    }
+//  }
+  for (integer i = 0; i < 3; ++i) {
+    n_point[i] = abs(range_start[i] - range_end[i]) + 1;
   }
 }
 
@@ -549,24 +547,23 @@ void cfd::Block::trim_abundant_ghost_mesh() {
   }
 }
 
-cfd::Mesh::Mesh(Parameter &parameter) {
+cfd::Mesh::Mesh(Parameter &parameter) : dimension{parameter.get_int("dimension")}, ngg{parameter.get_int("ngg")},
+                                        n_proc{parameter.get_int("n_proc")}, nblk{new integer[n_proc]} {
   const integer myid = parameter.get_int("myid");
   const bool parallel = parameter.get_bool("parallel");
-  const integer ngg{parameter.get_int("ngg")};
   //First read the grid points into memory
-  dimension = parameter.get_int("dimension");
-  read_grid(myid, ngg);
+  read_grid(myid/*, ngg*/);
   parameter.update_parameter("n_block", n_block);
   if (myid == 0) {
     fmt::print("Problem dimension: {}\nTotal grid number: {}\n", dimension, n_grid_total);
   }
 
-  read_boundary(myid, ngg);
+  read_boundary(myid/*, ngg*/);
 
-  read_inner_interface(myid, ngg);
+  read_inner_interface(myid/*, ngg*/);
 
   if (parallel) {
-    read_parallel_interface(myid, ngg);
+    read_parallel_interface(myid/*, ngg*/);
   }
 
   /*Scale the grid to physical units*/
@@ -581,7 +578,7 @@ cfd::Mesh::Mesh(Parameter &parameter) {
   }
 
   /*Initialize the coordinates of ghost grids*/
-  init_ghost_grid(myid, parallel, ngg);
+  init_ghost_grid(myid, parallel/*, ngg*/);
 
   /*Compute the metrics and jacobian values of all grid points*/
   for (auto &b: block) b.compute_jac_metric(myid);
@@ -598,7 +595,7 @@ const cfd::Block &cfd::Mesh::operator[](const size_t i) const {
   return block[i];
 }
 
-void cfd::Mesh::read_grid(const integer myid, const integer ngg) {
+void cfd::Mesh::read_grid(const integer myid/*, const integer ngg*/) {
   std::ifstream grd(fmt::format("./input_files/grid/grid{:>4}.grd", myid), std::ios::in);
   std::string input;
   std::getline(grd, input);
@@ -623,20 +620,23 @@ void cfd::Mesh::read_grid(const integer myid, const integer ngg) {
     //read grid coordinates
     for (integer k = 0; k < block[blk].mz; ++k) {
       for (integer j = 0; j < block[blk].my; ++j) {
-        for (integer i = 0; i < block[blk].mx; ++i)
+        for (integer i = 0; i < block[blk].mx; ++i) {
           grd >> block[blk].x(i, j, k);
+        }
       }
     }
     for (integer k = 0; k < block[blk].mz; ++k) {
       for (integer j = 0; j < block[blk].my; ++j) {
-        for (integer i = 0; i < block[blk].mx; ++i)
+        for (integer i = 0; i < block[blk].mx; ++i) {
           grd >> block[blk].y(i, j, k);
+        }
       }
     }
     for (integer k = 0; k < block[blk].mz; ++k) {
       for (integer j = 0; j < block[blk].my; ++j) {
-        for (integer i = 0; i < block[blk].mx; ++i)
+        for (integer i = 0; i < block[blk].mx; ++i) {
           grd >> block[blk].z(i, j, k);
+        }
       }
     }
   }
@@ -646,9 +646,45 @@ void cfd::Mesh::read_grid(const integer myid, const integer ngg) {
   //Sum grid number in all processes to the root process
   MPI_Reduce(&n_grid, &n_grid_total, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
   MPI_Bcast(&n_grid_total, 1, MPI_INT, 0, MPI_COMM_WORLD); //Broadcast total grid number to all processes
+
+  // Specify how many blocks there are on each process
+  MPI_Allgather(&n_block, 1, MPI_INT, nblk, 1, MPI_INT, MPI_COMM_WORLD);
+  auto *disp = new integer[n_proc];
+  disp[0] = 0;
+  n_block_total = nblk[0];
+  for (int i = 1; i < n_proc; ++i) {
+    disp[i] = disp[i - 1] + nblk[i - 1];
+    n_block_total += nblk[i];
+  }
+
+  mx_blk = new integer[n_block_total];
+  my_blk = new integer[n_block_total];
+  mz_blk = new integer[n_block_total];
+  auto *m_this = new integer[n_block * 3];
+  integer *mx_this = m_this, *my_this = &mx_this[n_block], *mz_this = &my_this[n_block];
+  for (int i = 0; i < n_block; ++i) {
+    mx_this[i] = block[i].mx;
+    my_this[i] = block[i].my;
+    mz_this[i] = block[i].mz;
+  }
+  MPI_Allgatherv(mx_this, n_block, MPI_INT, mx_blk, nblk, disp, MPI_INT, MPI_COMM_WORLD);
+  MPI_Allgatherv(my_this, n_block, MPI_INT, my_blk, nblk, disp, MPI_INT, MPI_COMM_WORLD);
+  MPI_Allgatherv(mz_this, n_block, MPI_INT, mz_blk, nblk, disp, MPI_INT, MPI_COMM_WORLD);
+  delete[]m_this;
+
+//  if (myid == 0) {
+//    fmt::print("There are {} blocks in all, the block number in each process is:\n", n_block_total);
+//    for (int i = 0; i < n_proc; ++i) {
+//      fmt::print("{}\n", n_block);
+//    }
+//    fmt::print("The dimension of the blocks are:\n");
+//    for (int i = 0; i < n_block_total; ++i) {
+//      fmt::print("Block {}:, mx = {}, my = {}, mz = {}\n", i, mx_blk[i], my_blk[i], mz_blk[i]);
+//    }
+//  }
 }
 
-void cfd::Mesh::read_boundary(integer myid, const integer ngg) {
+void cfd::Mesh::read_boundary(integer myid/*, const integer ngg*/) {
   std::ifstream grd(fmt::format("./input_files/boundary_condition/boundary{:>4}.txt", myid), std::ios::in);
   std::string input{};
   for (integer blk = 0; blk < n_block; ++blk) {
@@ -670,7 +706,7 @@ void cfd::Mesh::read_boundary(integer myid, const integer ngg) {
   }
 }
 
-void cfd::Mesh::read_inner_interface(const integer myid, integer ngg) {
+void cfd::Mesh::read_inner_interface(const integer myid/*, integer ngg*/) {
   std::ifstream grd(fmt::format("./input_files/boundary_condition/inner{:>4}.txt", myid), std::ios::in);
   std::string input{};
   // Read how many inner faces there are in each block and store them in @n_face.
@@ -704,7 +740,7 @@ void cfd::Mesh::read_inner_interface(const integer myid, integer ngg) {
   delete[]n_face;
 }
 
-void cfd::Mesh::read_parallel_interface(const integer myid, integer ngg) {
+void cfd::Mesh::read_parallel_interface(const integer myid/*, integer ngg*/) {
   std::ifstream grd(fmt::format("./input_files/boundary_condition/parallel{:>4}.txt", myid), std::ios::in);
   std::string input{};
   integer blk_num1{0}, tot_face{0};
@@ -750,7 +786,7 @@ void cfd::Mesh::scale(const real scale) {
   }
 }
 
-void cfd::Mesh::init_ghost_grid(const integer myid, const bool parallel, const integer ngg) {
+void cfd::Mesh::init_ghost_grid(const integer myid, const bool parallel/*, const integer ngg*/) {
   //Add ghost grid except corners
   for (integer blk = 0; blk < n_block; ++blk) {
     auto &B = block[blk];
@@ -823,7 +859,7 @@ void cfd::Mesh::init_ghost_grid(const integer myid, const bool parallel, const i
   init_inner_ghost_grid();
   //If we use parallel computation, assign the ghost grid of parallel boundaries by MPI
   if (parallel) {
-    init_parallel_ghost_grid(myid, ngg);
+    init_parallel_ghost_grid(myid/*, ngg*/);
   }
   /*Assign ghost grids on the edges and at the corners by using parallelogram hypothesis*/
   for (integer blk = 0; blk < n_block; ++blk) {
@@ -956,7 +992,7 @@ void cfd::Mesh::init_inner_ghost_grid() {
   }
 }
 
-void cfd::Mesh::init_parallel_ghost_grid(const integer myid, const integer ngg) {
+void cfd::Mesh::init_parallel_ghost_grid(const integer myid/*, const integer ngg*/) {
   //Add up to the total face number
   size_t total_face = 0;
   for (integer m = 0; m < n_block; ++m) {
@@ -977,9 +1013,17 @@ void cfd::Mesh::init_parallel_ghost_grid(const integer myid, const integer ngg) 
       const auto &face = B.parallel_face[f];
       //The length of the array is 3*(ngg+1)*${number of grid points of the face}
       //ngg+1 is the number of layers to communicate, 3 for 3 coordinates(x,y,z)
-      const integer len = 3 * (ngg + 1) * (std::abs(face.range_start[0] - face.range_end[0]) + 1)
-                          * (std::abs(face.range_end[1] - face.range_start[1]) + 1)
-                          * (std::abs(face.range_end[2] - face.range_start[2]) + 1);
+      integer extent[3]{std::abs(face.range_start[0] - face.range_end[0]) + 1,
+                        std::abs(face.range_start[1] - face.range_end[1]) + 1,
+                        std::abs(face.range_start[2] - face.range_end[2]) + 1};
+      for (int i = 0; i < 3; ++i) {
+        if (i == face.face) continue;
+        extent[i] += 2 * ngg + 2;
+      }
+      const integer len = 3 * (ngg + 1) * extent[0] * extent[1] * extent[2];
+//      const integer len = 3 * (ngg + 1) * (std::abs(face.range_start[0] - face.range_end[0]) + 1)
+//                          * (std::abs(face.range_end[1] - face.range_start[1]) + 1)
+//                          * (std::abs(face.range_end[2] - face.range_start[2]) + 1);
       temp_s[fc_num] = new real[len];
       temp_r[fc_num] = new real[len];
       ++fc_num;
@@ -1003,11 +1047,17 @@ void cfd::Mesh::init_parallel_ghost_grid(const integer myid, const integer ngg) 
                                                                                       Fc.range_end[2]};
       min_[0] = Fc.range_start[Fc.loop_order[0]] - Fc.direction;
       max_[0] = Fc.range_end[Fc.loop_order[0]] - Fc.direction * (ngg + 1);
-      min_[1] = Fc.range_start[Fc.loop_order[1]];
-      max_[1] = Fc.range_end[Fc.loop_order[1]];
-      min_[2] = Fc.range_start[Fc.loop_order[2]];
-      max_[2] = Fc.range_end[Fc.loop_order[2]];
-      const integer di1 = -Fc.direction, dj1 = Fc.loop_dir[1], dk1 = Fc.loop_dir[2];
+      min_[1] = Fc.range_start[Fc.loop_order[1]] - Fc.loop_dir[Fc.loop_order[1]] * (ngg + 1);
+      max_[1] = Fc.range_end[Fc.loop_order[1]] + Fc.loop_dir[Fc.loop_order[1]] * (ngg + 1);
+      min_[2] = Fc.range_start[Fc.loop_order[2]] - Fc.loop_dir[Fc.loop_order[2]] * (ngg + 1);
+      max_[2] = Fc.range_end[Fc.loop_order[2]] + Fc.loop_dir[Fc.loop_order[2]] * (ngg + 1);
+      const integer di1 = -Fc.direction, dj1 = Fc.loop_dir[1];
+      integer dk1 = Fc.loop_dir[2];
+      if (dimension == 2) {
+        min_[2] = -3;
+        max_[2] = 3;
+        dk1 = 1;
+      }
       integer send_ijk[]{0, 0, 0};
       for (send_ijk[Fc.loop_order[0]] = min_[0]; di1 * (send_ijk[Fc.loop_order[0]] - max_[0]) != 1; send_ijk[Fc.
           loop_order[0]] += di1) {
@@ -1047,12 +1097,18 @@ void cfd::Mesh::init_parallel_ghost_grid(const integer myid, const integer ngg) 
       integer min_[]{0, 0, 0}, max_[]{0, 0, 0};
       min_[0] = fc.range_start[fc.loop_order[0]] + fc.direction;
       max_[0] = fc.range_end[fc.loop_order[0]] + fc.direction * (ngg + 1);
-      min_[1] = fc.range_start[fc.loop_order[1]];
-      max_[1] = fc.range_end[fc.loop_order[1]];
-      min_[2] = fc.range_start[fc.loop_order[2]];
-      max_[2] = fc.range_end[fc.loop_order[2]];
-      const integer di1 = fc.direction, dj1 = fc.loop_dir[1], dk1 = fc.loop_dir[2];
+      min_[1] = fc.range_start[fc.loop_order[1]] - fc.loop_dir[fc.loop_order[1]] * (ngg + 1);
+      max_[1] = fc.range_end[fc.loop_order[1]] + fc.loop_dir[fc.loop_order[1]] * (ngg + 1);
+      min_[2] = fc.range_start[fc.loop_order[2]] - fc.loop_dir[fc.loop_order[2]] * (ngg + 1);
+      max_[2] = fc.range_end[fc.loop_order[2]] + fc.loop_dir[fc.loop_order[2]] * (ngg + 1);
+      const integer di1 = fc.direction, dj1 = fc.loop_dir[1];
+      integer dk1 = fc.loop_dir[2];
       integer n{0};
+      if (dimension == 2) {
+        min_[2] = -3;
+        max_[2] = 3;
+        dk1 = 1;
+      }
       integer recv_ijk[]{0, 0, 0};
       // Because x/y/z are stored independently, these values should be read continuously.
       for (recv_ijk[fc.loop_order[0]] = min_[0]; di1 * (recv_ijk[fc.loop_order[0]] - max_[0]) != 1; recv_ijk[fc.

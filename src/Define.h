@@ -25,15 +25,3 @@ enum class MixtureModel{
   FR,       // Finite Rate
   FL,       // Flamelet Model
 };
-
-enum class CombModel{
-  NoReaction,
-  FiniteRate,
-  Flamelet
-};
-
-template<MixtureModel T>
-inline constexpr bool is_mixture = true;
-
-template<>
-inline constexpr bool is_mixture<MixtureModel::Air> = false;

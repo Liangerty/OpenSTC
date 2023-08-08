@@ -13,24 +13,24 @@ Current ability
 
 The code is based on finite difference method and structured grid. The Navier-Stokes equations with species conservation equations are solved on curvilinear coordinates.
 
-- Turbulent simulations: Laminar
-- RANS model: None
+- Turbulent simulations: Laminar / RANS
+- RANS model: k-$\omega$ SST
 - Mixture model: Air(single species) / Mixture(given in CHEMKIN form)
 - Combustion model: None
-- Boundary conditions: Supersonic inlet / Supersonic outlet / No-slip wall
+- Boundary conditions: Supersonic inlet / Supersonic outlet / No-slip wall / Symmetry
 
 Numerical methods:
 
 - Inviscid flux: AUSM+
 - Viscous flux: 2nd-order central difference
-- Temporal scheme: Explicit Euler
+- Temporal scheme: Explicit Euler / DPLUR
 - Stiff chemistry: None
 
 About the interface:
 
 - Grid: Plot3D with a little variation (The code to generate readable grid for this program can be acquired by emailing me. And the interface would be generalized later to avoid such transforming requirements.)
 - Output: Tecplot file in `.plt` format.
-- Parallelization: Serial only.
+- Parallelization: MPI support(a CUDA-aware MPI is required).
 - Continue from a previous simulation: The program can be started from a previous result if the grid is not changed and the flowfield info is given. We can continue solving with a completely identical setup, or with a changed setup. For example, we can continue computing from a simulation with less species to a simualtion with more species, from laminar to turbulent state, from pure mixing case to combustion case, etc.
 - Chemistry: CHEMKIN format
 - Setups: Txt files to be editted.

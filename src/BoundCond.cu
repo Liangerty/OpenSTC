@@ -2,6 +2,7 @@
 #include "Field.h"
 #include "FieldOperation.cuh"
 #include "SST.cuh"
+#include "Parallel.h"
 
 #ifdef GPU
 namespace cfd {
@@ -219,10 +220,7 @@ DBoundCond<mix_model, turb_method>::initialize_bc_on_GPU(Mesh &mesh, std::vector
         break;
       }
     }
-    if (this_iter == bc_labels.end()) {
-      printf("This boundary condition is not included in the grid boundary file. Ignore boundary condition {%s}\n",
-             bc_name.c_str());
-    } else {
+    if (this_iter != bc_labels.end()) {
       bc_labels.erase(this_iter);
       auto type = std::get<std::string>(bc.at("type"));
       if (type == "wall") {
@@ -267,49 +265,45 @@ DBoundCond<mix_model, turb_method>::initialize_bc_on_GPU(Mesh &mesh, std::vector
   register_bc<Outflow>(outflow, n_outflow, outflow_idx, outflow_info, species, parameter);
 
   link_bc_to_boundaries(mesh, field);
+
+  MpiParallel::barrier();
+  if (parameter.get_int("myid") == 0) {
+    printf("Finish setting up boundary conditions.\n");
+  }
 }
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 void DBoundCond<mix_model, turb_method>::link_bc_to_boundaries(Mesh &mesh,
                                                                std::vector<Field<mix_model, turb_method>> &field) const {
   const integer n_block{mesh.n_block};
-  constexpr integer type_of_bc{4}; // Wall, Symmetry, Inflow, Outflow
-  integer **i_wall = new integer *[n_wall];
+  auto **i_wall = new integer *[n_wall];
   for (size_t i = 0; i < n_wall; i++) {
     i_wall[i] = new integer[n_block];
     for (integer j = 0; j < n_block; j++) {
       i_wall[i][j] = 0;
     }
   }
-  integer **i_symm = new integer *[n_symmetry];
+  auto **i_symm = new integer *[n_symmetry];
   for (size_t i = 0; i < n_symmetry; i++) {
     i_symm[i] = new integer[n_block];
     for (integer j = 0; j < n_block; j++) {
       i_symm[i][j] = 0;
     }
   }
-  integer **i_inflow = new integer *[n_inflow];
+  auto **i_inflow = new integer *[n_inflow];
   for (size_t i = 0; i < n_inflow; i++) {
     i_inflow[i] = new integer[n_block];
     for (integer j = 0; j < n_block; j++) {
       i_inflow[i][j] = 0;
     }
   }
-  integer **i_outflow = new integer *[n_outflow];
+  auto **i_outflow = new integer *[n_outflow];
   for (size_t i = 0; i < n_outflow; i++) {
     i_outflow[i] = new integer[n_block];
     for (integer j = 0; j < n_block; j++) {
       i_outflow[i][j] = 0;
     }
   }
-  //const integer n_block{mesh.n_block};
-  //constexpr integer type_of_bc{4}; // Wall, Symmetry, Inflow, Outflow
-  //auto* i_bcs = new integer[n_block * type_of_bc];
-  //auto* i_wall = i_bcs;
-  //auto* i_symm = &i_wall[n_block];
-  //auto* i_inflow = &i_symm[n_block];
-  //auto* i_outflow = &i_inflow[n_block];
-  //memset(i_bcs, 0, n_block * type_of_bc * sizeof(integer));
 
   // We first count how many faces corresponds to a given boundary condition
   for (integer i = 0; i < n_block; i++) {
@@ -373,8 +367,6 @@ void DBoundCond<mix_model, turb_method>::link_bc_to_boundaries(Mesh &mesh,
   delete[]i_symm;
   delete[]i_inflow;
   delete[]i_outflow;
-  //delete[]i_bcs;
-  printf("Finish setting up boundary conditions.\n");
 }
 
 template
@@ -395,29 +387,6 @@ class DBoundCond<MixtureModel::FR, TurbMethod::Laminar>;
 template
 class DBoundCond<MixtureModel::FR, TurbMethod::RANS>;
 
-//void count_boundary_of_type_bc(const std::vector<Boundary>& boundary, integer n_bc, integer* sep, integer blk_idx,
-//  integer n_block, BCInfo* bc_info) {
-//  if (n_bc <= 0) {
-//    return;
-//  }
-//
-//  // Count how many faces correspond to the given bc
-//  const auto n_boundary{boundary.size()};
-//  integer n{0};
-//  for (size_t l = 0; l < n_bc; l++) {
-//    integer label = bc_info[l].label; // This means every bc should have a member "label"
-//    for (size_t i = 0; i < n_boundary; i++) {
-//      auto& b = boundary[i];
-//      if (b.type_label == label) {
-//        ++bc_info[l].n_boundary;
-//        ++n;
-//      }
-//    }
-//  }
-//  if (blk_idx < n_block - 1) {
-//    sep[blk_idx + 1] = n + sep[blk_idx];
-//  }
-//}
 void count_boundary_of_type_bc(const std::vector<Boundary> &boundary, integer n_bc, integer **sep, integer blk_idx,
                                integer n_block, BCInfo *bc_info) {
   if (n_bc <= 0) {
@@ -426,8 +395,8 @@ void count_boundary_of_type_bc(const std::vector<Boundary> &boundary, integer n_
 
   // Count how many faces correspond to the given bc
   const auto n_boundary{boundary.size()};
-  integer *n = new integer[n_bc];
-  memset(n,0,sizeof(integer)*n_bc);
+  auto *n = new integer[n_bc];
+  memset(n, 0, sizeof(integer) * n_bc);
   for (size_t l = 0; l < n_bc; l++) {
     integer label = bc_info[l].label; // This means every bc should have a member "label"
     for (size_t i = 0; i < n_boundary; i++) {
@@ -446,21 +415,6 @@ void count_boundary_of_type_bc(const std::vector<Boundary> &boundary, integer n_
   delete[]n;
 }
 
-//void link_boundary_and_condition(const std::vector<Boundary>& boundary, BCInfo* bc, integer n_bc, const integer* sep,
-//  integer i_zone) {
-//  const auto n_boundary{boundary.size()};
-//  for (size_t l = 0; l < n_bc; l++) {
-//    integer label = bc[l].label;
-//    int has_read{sep[i_zone]};
-//    for (auto i = 0; i < n_boundary; i++) {
-//      auto& b = boundary[i];
-//      if (b.type_label == label) {
-//        bc[l].boundary[has_read] = make_int2(i_zone, i);
-//        ++has_read;
-//      }
-//    }
-//  }
-//}
 void link_boundary_and_condition(const std::vector<Boundary> &boundary, BCInfo *bc, integer n_bc, integer **sep,
                                  integer i_zone) {
   const auto n_boundary{boundary.size()};
@@ -492,7 +446,6 @@ __global__ void apply_symmetry(DZone *zone, integer i_face) {
 
   const integer inner_idx[3]{i - dir[0], j - dir[1], k - dir[2]};
 
-//  auto metric = zone->metric(inner_idx[0], inner_idx[1], inner_idx[2]);
   auto metric = zone->metric(i, j, k);
   real k_x{metric(face + 1, 1)}, k_y{metric(face + 1, 2)}, k_z{metric(face + 1, 3)};
   real k_magnitude = sqrt(k_x * k_x + k_y * k_y + k_z * k_z);
@@ -541,15 +494,6 @@ __global__ void apply_symmetry(DZone *zone, integer i_face) {
 
     bv(gi, gj, gk, 0) = bv(ii, ij, ik, 0);
 
-//    metric = zone->metric(ii, ij, ik);
-//    k_x = metric(face + 1, 1);
-//    k_y = metric(face + 1, 2);
-//    k_z = metric(face + 1, 3);
-//    k_magnitude = sqrt(k_x * k_x + k_y * k_y + k_z * k_z);
-//    k_x /= k_magnitude;
-//    k_y /= k_magnitude;
-//    k_z /= k_magnitude;
-
     auto &u{bv(ii, ij, ik, 1)}, v{bv(ii, ij, ik, 2)}, w{bv(ii, ij, ik, 3)};
     u_k = k_x * u + k_y * v + k_z * w;
     bv(gi, gj, gk, 1) = u - 2 * u_k * k_x;
@@ -561,15 +505,7 @@ __global__ void apply_symmetry(DZone *zone, integer i_face) {
     bv(gi, gj, gk, 5) = bv(ii, ij, ik, 5);
     for (integer l = 0; l < zone->n_scal; ++l) {
       sv(gi, gj, gk, l) = sv(ii, ij, ik, l);
-      cv(gi, gj, gk, l + 5) = bv(gi, gj, gk, 0) * sv(ii, ij, ik, l);
     }
-
-    // Assign value for conservative variables
-    cv(gi, gj, gk, 0) = bv(gi, gj, gk, 0);
-    cv(gi, gj, gk, 1) = bv(gi, gj, gk, 0) * bv(gi, gj, gk, 1);
-    cv(gi, gj, gk, 2) = bv(gi, gj, gk, 0) * bv(gi, gj, gk, 2);
-    cv(gi, gj, gk, 3) = bv(gi, gj, gk, 0) * bv(gi, gj, gk, 3);
-    cv(gi, gj, gk, 4) = cv(ii, ij, ik, 4);
 
     if constexpr (turb_method == TurbMethod::RANS) {
       zone->mut(gi, gj, gk) = zone->mut(ii, ij, ik);
@@ -590,17 +526,12 @@ __global__ void apply_outflow(DZone *zone, integer i_face) {
   if (i > range_end[0] || j > range_end[1] || k > range_end[2]) return;
 
   auto &bv = zone->bv;
-  auto &cv = zone->cv;
   auto &sv = zone->sv;
 
   for (integer g = 1; g <= ngg; ++g) {
     const integer gi{i + g * dir[0]}, gj{j + g * dir[1]}, gk{k + g * dir[2]};
     for (integer l = 0; l < 6; ++l) {
       bv(gi, gj, gk, l) = bv(i, j, k, l);
-    }
-    for (integer l = 0; l < zone->n_var; ++l) {
-      // All conservative variables including species and scalars are assigned with appropriate value
-      cv(gi, gj, gk, l) = cv(i, j, k, l);
     }
     for (integer l = 0; l < zone->n_scal; ++l) {
       sv(gi, gj, gk, l) = sv(i, j, k, l);
@@ -624,7 +555,6 @@ __global__ void apply_inflow(DZone *zone, Inflow<mix_model, turb_method> *inflow
   if (i > range_end[0] || j > range_end[1] || k > range_end[2]) return;
 
   auto &bv = zone->bv;
-  auto &cv = zone->cv;
   auto &sv = zone->sv;
 
   const integer n_scalar = zone->n_scal;
@@ -634,27 +564,6 @@ __global__ void apply_inflow(DZone *zone, Inflow<mix_model, turb_method> *inflow
   const real v = inflow->v;
   const real w = inflow->w;
   const auto *i_sv = inflow->sv;
-
-//  bv(i, j, k, 0) = density;
-//  bv(i, j, k, 1) = u;
-//  bv(i, j, k, 2) = v;
-//  bv(i, j, k, 3) = w;
-//  bv(i, j, k, 4) = inflow->pressure;
-//  bv(i, j, k, 5) = inflow->temperature;
-//  for (int l = 0; l < n_scalar; ++l) {
-//    sv(i, j, k, l) = i_sv[l];
-//    if constexpr (mix_model != MixtureModel::FL) {
-//      cv(i, j, k, 5 + l) = density * i_sv[l];
-//    }
-//  }
-//  cv(i, j, k, 0) = density;
-//  cv(i, j, k, 1) = density * u;
-//  cv(i, j, k, 2) = density * v;
-//  cv(i, j, k, 3) = density * w;
-//  compute_total_energy<mix_model>(i, j, k, zone, param);
-//  if constexpr (turb_method == TurbMethod::RANS) {
-//    zone->mut(i, j, k) = inflow->mut;
-//  }
 
   for (integer g = 1; g <= ngg; g++) {
     const integer gi{i + g * dir[0]}, gj{j + g * dir[1]}, gk{k + g * dir[2]};
@@ -666,15 +575,7 @@ __global__ void apply_inflow(DZone *zone, Inflow<mix_model, turb_method> *inflow
     bv(gi, gj, gk, 5) = inflow->temperature;
     for (int l = 0; l < n_scalar; ++l) {
       sv(gi, gj, gk, l) = i_sv[l];
-      if constexpr (mix_model != MixtureModel::FL) {
-        cv(gi, gj, gk, 5 + l) = density * i_sv[l];
-      }
     }
-    cv(gi, gj, gk, 0) = density;
-    cv(gi, gj, gk, 1) = density * u;
-    cv(gi, gj, gk, 2) = density * v;
-    cv(gi, gj, gk, 3) = density * w;
-    compute_total_energy<mix_model>(gi, gj, gk, zone, param);
     if constexpr (turb_method == TurbMethod::RANS) {
       zone->mut(gi, gj, gk) = inflow->mut;
     }
@@ -793,31 +694,18 @@ __global__ void apply_wall(DZone *zone, Wall *wall, DParameter *param, integer i
     bv(i_gh[0], i_gh[1], i_gh[2], 3) = -w_i;
     bv(i_gh[0], i_gh[1], i_gh[2], 4) = p_i;
     bv(i_gh[0], i_gh[1], i_gh[2], 5) = t_g;
-    cv(i_gh[0], i_gh[1], i_gh[2], 0) = rho_g;
-    cv(i_gh[0], i_gh[1], i_gh[2], 1) = -rho_g * u_i;
-    cv(i_gh[0], i_gh[1], i_gh[2], 2) = -rho_g * v_i;
-    cv(i_gh[0], i_gh[1], i_gh[2], 3) = -rho_g * w_i;
-    if constexpr (mix_model != MixtureModel::FL) {
-      for (integer l = 0; l < zone->n_spec; ++l) {
-        cv(i_gh[0], i_gh[1], i_gh[2], l + 5) = sv(i_gh[0], i_gh[1], i_gh[2], l) * rho_g;
-      }
-    }
-    compute_total_energy<mix_model>(i_gh[0], i_gh[1], i_gh[2], zone, param);
 
     // turbulent boundary condition
     if constexpr (turb_method == TurbMethod::RANS) {
       if (param->rans_model == 2) {
         // SST
         sv(i_gh[0], i_gh[1], i_gh[2], n_spec) = 0;
-        cv(i_gh[0], i_gh[1], i_gh[2], n_spec + 5) = 0;
         sv(i_gh[0], i_gh[1], i_gh[2], n_spec + 1) = sv(i, j, k, n_spec + 1);
-        cv(i_gh[0], i_gh[1], i_gh[2], n_spec + 6) = sv(i, j, k, n_spec + 1) * rho_g;
         zone->mut(i_gh[0], i_gh[1], i_gh[2]) = 0;
       }
     }
   }
 }
-
 
 } // cfd
 #endif

@@ -6,10 +6,10 @@
 #include <fstream>
 #include <filesystem>
 #include "gxl_lib/MyString.h"
+#include "MPIIO.hpp"
+#include <mpi.h>
 
 namespace cfd {
-class Mesh;
-
 template<MixtureModel mix_model = MixtureModel::Air, TurbMethod turb_method = TurbMethod::Laminar>
 void
 initialize_basic_variables(Parameter &parameter, const Mesh &mesh, std::vector<Field<mix_model, turb_method>> &field,
@@ -33,7 +33,7 @@ std::vector<integer>
 identify_variable_labels(cfd::Parameter &parameter, std::vector<std::string> &var_name, Species &species,
                          std::array<integer, 2> &old_data_info);
 
-void read_one_useless_variable(FILE *fp, integer mx, integer my, integer mz, integer data_format);
+//void read_one_useless_variable(FILE *fp, integer mx, integer my, integer mz, integer data_format);
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 void initialize_spec_from_inflow(cfd::Parameter &parameter, const cfd::Mesh &mesh,
@@ -49,6 +49,13 @@ void
 initialize_basic_variables(Parameter &parameter, const Mesh &mesh, std::vector<Field<mix_model, turb_method>> &field,
                            Species &species) {
   const integer init_method = parameter.get_int("initial");
+  // No matter which method is used to initialize the flowfield,
+  // the default inflow is first read and initialize the inf parameters.
+  // Otherwise, for simulations that begin from previous simulations,
+  // processes other than the one containing the inflow plane would have no info about inf parameters.
+  const std::string default_init = parameter.get_string("default_init");
+  Inflow<mix_model, turb_method> default_inflow(default_init, species, parameter);
+
   switch (init_method) {
     case 0:initialize_from_start(parameter, mesh, field, species);
       break;
@@ -104,6 +111,228 @@ initialize_from_start(Parameter &parameter, const Mesh &mesh, std::vector<Field<
   }
 }
 
+//template<MixtureModel mix_model, TurbMethod turb_method>
+//void
+//read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Field<mix_model, turb_method>> &field,
+//               Species &species) {
+//  const std::filesystem::path out_dir("output/field");
+//  if (!exists(out_dir)) {
+//    printf("The directory to flowfield files does not exist!\n");
+//  }
+//  char id[5];
+//  sprintf(id, "%4d", parameter.get_int("myid"));
+//  std::string id_str = id;
+//  FILE *fp = fopen((out_dir.string() + "/flowfield" + id_str + ".plt").c_str(), "rb");
+////  FILE *fp = fopen((out_dir.string() + std::format("/flowfield{:>4}.plt", parameter.get_int("myid"))).c_str(), "rb");
+//
+//  std::string magic_number;
+//  fread(magic_number.data(), 8, 1, fp);
+//  int32_t byte_order{1};
+//  fread(&byte_order, 4, 1, fp);
+//  int32_t file_type{0};
+//  fread(&file_type, 4, 1, fp);
+//  std::string solution_file = gxl::read_str(fp);
+//  integer n_var_old{5};
+//  fread(&n_var_old, 4, 1, fp);
+//  std::vector<std::string> var_name;
+//  var_name.resize(n_var_old);
+//  for (size_t i = 0; i < n_var_old; ++i) {
+//    var_name[i] = gxl::read_str(fp);
+//  }
+//  // The first one tells if species info exists, if exists (1), else, (0).
+//  // The 2nd one tells if turbulent var exists, if 0 (compute from laminar), 1(From SA), 2(From SST)
+//  std::array old_data_info{0, 0};//,0
+//  auto index_order = cfd::identify_variable_labels<mix_model, turb_method>(parameter, var_name, species,
+//                                                                           old_data_info);
+//  const integer n_spec{species.n_spec};
+//  const integer n_turb{parameter.get_int("n_turb")};
+//
+//  float marker{0.0f};
+//  constexpr float eoh_marker{357.0f};
+//  fread(&marker, 4, 1, fp);
+//  std::vector<std::string> zone_name;
+//  std::vector<double> solution_time;
+//  integer zone_number{0};
+//  while (fabs(marker - eoh_marker) > 1e-25f) {
+//    zone_name.emplace_back(gxl::read_str(fp));
+//    int32_t parent_zone{-1};
+//    fread(&parent_zone, 4, 1, fp);
+//    int32_t strand_id{-2};
+//    fread(&strand_id, 4, 1, fp);
+//    real sol_time{0};
+//    fread(&sol_time, 8, 1, fp);
+//    solution_time.emplace_back(sol_time);
+//    int32_t zone_color{-1};
+//    fread(&zone_color, 4, 1, fp);
+//    int32_t zone_type{0};
+//    fread(&zone_type, 4, 1, fp);
+//    int32_t var_location{0};
+//    fread(&var_location, 4, 1, fp);
+//    int32_t raw_face_neighbor{0};
+//    fread(&raw_face_neighbor, 4, 1, fp);
+//    int32_t miscellaneous_face{0};
+//    fread(&miscellaneous_face, 4, 1, fp);
+//    integer mx{0}, my{0}, mz{0};
+//    fread(&mx, 4, 1, fp);
+//    fread(&my, 4, 1, fp);
+//    fread(&mz, 4, 1, fp);
+//    int32_t auxi_data{1};
+//    fread(&auxi_data, 4, 1, fp);
+//    while (auxi_data != 0) {
+//      auto auxi_name{gxl::read_str(fp)};
+//      int32_t auxi_format{0};
+//      fread(&auxi_format, 4, 1, fp);
+//      auto auxi_val{gxl::read_str(fp)};
+//      if (auxi_name == "step") {
+//        parameter.update_parameter("step", std::stoi(auxi_val));
+//      }
+//      fread(&auxi_data, 4, 1, fp);
+//    }
+//    ++zone_number;
+//    fread(&marker, 4, 1, fp);
+//  }
+//
+//  // Next, data section
+//  for (size_t b = 0; b < mesh.n_block; ++b) {
+//    fread(&marker, 4, 1, fp);
+//    int32_t data_format{1};
+//    for (int l = 0; l < n_var_old; ++l) {
+//      fread(&data_format, 4, 1, fp);
+//    }
+//    size_t data_size{4};
+//    if (data_format == 2) {
+//      data_size = 8;
+//    }
+//    int32_t passive_var{0};
+//    fread(&passive_var, 4, 1, fp);
+//    int32_t shared_var{0};
+//    fread(&shared_var, 4, 1, fp);
+//    int32_t shared_connect{-1};
+//    fread(&shared_connect, 4, 1, fp);
+//    double max{0}, min{0};
+//    for (int l = 0; l < n_var_old; ++l) {
+//      fread(&min, 8, 1, fp);
+//      fread(&max, 8, 1, fp);
+//    }
+//    // zone data
+//    // First, the coordinates x, y and z.
+//    const integer mx{mesh[b].mx}, my{mesh[b].my}, mz{mesh[b].mz};
+//    for (size_t l = 0; l < 3; ++l) {
+//      read_one_useless_variable(fp, mx, my, mz, data_format);
+//    }
+//
+//    // Other variables
+//    for (size_t l = 3; l < n_var_old; ++l) {
+//      auto index = index_order[l];
+//      if (index < 6) {
+//        // basic variables
+//        auto &bv = field[b].bv;
+//        if (data_format == 1) {
+//          // float storage
+//          float v{0.0f};
+//          for (int k = 0; k < mz; ++k) {
+//            for (int j = 0; j < my; ++j) {
+//              for (int i = 0; i < mx; ++i) {
+//                fread(&v, data_size, 1, fp);
+//                bv(i, j, k, index) = v;
+//              }
+//            }
+//          }
+//        } else {
+//          // double storage
+//          for (int k = 0; k < mz; ++k) {
+//            for (int j = 0; j < my; ++j) {
+//              for (int i = 0; i < mx; ++i) {
+//                fread(&bv(i, j, k, index), data_size, 1, fp);
+//              }
+//            }
+//          }
+//        }
+//      } else if (index < 6 + n_spec) {
+//        // If air, n_spec=0;
+//        // species variables
+//        auto &sv = field[b].sv;
+//        index -= 6;
+//        if (data_format == 1) {
+//          // float storage
+//          float v{0.0f};
+//          for (int k = 0; k < mz; ++k) {
+//            for (int j = 0; j < my; ++j) {
+//              for (int i = 0; i < mx; ++i) {
+//                fread(&v, data_size, 1, fp);
+//                sv(i, j, k, index) = v;
+//              }
+//            }
+//          }
+//        } else {
+//          // double storage
+//          for (int k = 0; k < mz; ++k) {
+//            for (int j = 0; j < my; ++j) {
+//              for (int i = 0; i < mx; ++i) {
+//                fread(&sv(i, j, k, index), data_size, 1, fp);
+//              }
+//            }
+//          }
+//        }
+//      } else if (index < 6 + n_spec + n_turb) {
+//        // If laminar, n_turb=0
+//        // turbulent variables
+//        auto &sv = field[b].sv;
+//        index -= 6;
+//        if (n_turb == old_data_info[1]) {
+//          // SA from SA or SST from SST
+//          if (data_format == 1) {
+//            // float storage
+//            float v{0.0f};
+//            for (int k = 0; k < mz; ++k) {
+//              for (int j = 0; j < my; ++j) {
+//                for (int i = 0; i < mx; ++i) {
+//                  fread(&v, data_size, 1, fp);
+//                  sv(i, j, k, index) = v;
+//                }
+//              }
+//            }
+//          } else {
+//            // double storage
+//            for (int k = 0; k < mz; ++k) {
+//              for (int j = 0; j < my; ++j) {
+//                for (int i = 0; i < mx; ++i) {
+//                  fread(&sv(i, j, k, index), data_size, 1, fp);
+//                }
+//              }
+//            }
+//          }
+//        } else if (n_turb == 1 && old_data_info[1] == 2) {
+//          // SA from SST. Currently, just use freestream value to intialize. Modify this later when I write SA
+//          old_data_info[1] = 0;
+//        } else if (n_turb == 2 && old_data_info[1] == 1) {
+//          // SST from SA. As ACANS has done, the turbulent variables are intialized from freestream value
+//          old_data_info[1] = 0;
+//        }
+//      } else {
+//        // No matched label, just ignore
+//        read_one_useless_variable(fp, mx, my, mz, data_format);
+//      }
+//    }
+//  }
+//
+//  // Next, if the previous simulation does not contain some of the variables used in the current simulation,
+//  // then we initialize them here
+//  if constexpr (mix_model != MixtureModel::Air) {
+//    if (old_data_info[0] == 0) {
+//      initialize_spec_from_inflow(parameter, mesh, field, species);
+//    }
+//  }
+//  if constexpr (turb_method == TurbMethod::RANS) {
+//    if (old_data_info[1] == 0) {
+//      initialize_turb_from_inflow(parameter, mesh, field, species);
+//    }
+//  }
+//
+//  if (parameter.get_int("myid") == 0) {
+//    printf("Flowfield is initialized from previous simulation results.\n");
+//  }
+//}
 template<MixtureModel mix_model, TurbMethod turb_method>
 void
 read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Field<mix_model, turb_method>> &field,
@@ -112,189 +341,120 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
   if (!exists(out_dir)) {
     printf("The directory to flowfield files does not exist!\n");
   }
-  char id[5];
-  sprintf(id, "%4d", parameter.get_int("myid"));
-  std::string id_str = id;
-  FILE *fp = fopen((out_dir.string() + "/flowfield" + id_str + ".plt").c_str(), "rb");
-//  FILE *fp = fopen((out_dir.string() + std::format("/flowfield{:>4}.plt", parameter.get_int("myid"))).c_str(), "rb");
+  MPI_File fp;
+  MPI_File_open(MPI_COMM_WORLD, (out_dir.string() + "/flowfield.plt").c_str(), MPI_MODE_RDONLY, MPI_INFO_NULL, &fp);
+  MPI_Offset offset{0};
+  MPI_Status status;
 
-  std::string magic_number;
-  fread(magic_number.data(), 8, 1, fp);
-  int32_t byte_order{1};
-  fread(&byte_order, 4, 1, fp);
-  int32_t file_type{0};
-  fread(&file_type, 4, 1, fp);
-  std::string solution_file = gxl::read_str(fp);
+  // Magic number, 8 bytes + byte order + file type
+  offset += 16;
+  // "solution file"
+  gxl::read_str_from_plt_MPI_ver(fp, offset);
   integer n_var_old{5};
-  fread(&n_var_old, 4, 1, fp);
+  MPI_File_read_at(fp, offset, &n_var_old, 1, MPI_INT, &status);
+  offset += 4;
   std::vector<std::string> var_name;
   var_name.resize(n_var_old);
   for (size_t i = 0; i < n_var_old; ++i) {
-    var_name[i] = gxl::read_str(fp);
+    var_name[i] = gxl::read_str_from_plt_MPI_ver(fp, offset);
   }
   // The first one tells if species info exists, if exists (1), else, (0).
   // The 2nd one tells if turbulent var exists, if 0 (compute from laminar), 1(From SA), 2(From SST)
-  std::array old_data_info{0, 0};//,0
+  std::array old_data_info{0, 0};
   auto index_order = cfd::identify_variable_labels<mix_model, turb_method>(parameter, var_name, species,
                                                                            old_data_info);
   const integer n_spec{species.n_spec};
   const integer n_turb{parameter.get_int("n_turb")};
 
-  float marker{0.0f};
-  constexpr float eoh_marker{357.0f};
-  fread(&marker, 4, 1, fp);
+  integer *mx = new integer[mesh.n_block_total], *my = new integer[mesh.n_block_total], *mz = new integer[mesh.n_block_total];
+  for (int b = 0; b < mesh.n_block_total; ++b) {
+    // 1. Zone marker. Value = 299.0, indicates a V112 header.
+    offset += 4;
+    // 2. Zone name.
+    gxl::read_str_from_plt_MPI_ver(fp, offset);
+    // Jump through the following info which is not relevant to the current process.
+    offset += 36;
+    // For ordered zone, specify IMax, JMax, KMax
+    MPI_File_read_at(fp, offset, &mx[b], 1, MPI_INT, &status);
+    offset += 4;
+    MPI_File_read_at(fp, offset, &my[b], 1, MPI_INT, &status);
+    offset += 4;
+    MPI_File_read_at(fp, offset, &mz[b], 1, MPI_INT, &status);
+    offset += 4;
+    // 11. For all zone types (repeat for each Auxiliary data name/value pair), no more data
+    offset += 4;
+  }
+  // Read the EOHMARKER
+  offset += 4;
+
+
   std::vector<std::string> zone_name;
   std::vector<double> solution_time;
-  integer zone_number{0};
-  while (fabs(marker - eoh_marker) > 1e-25f) {
-    zone_name.emplace_back(gxl::read_str(fp));
-    int32_t parent_zone{-1};
-    fread(&parent_zone, 4, 1, fp);
-    int32_t strand_id{-2};
-    fread(&strand_id, 4, 1, fp);
-    real sol_time{0};
-    fread(&sol_time, 8, 1, fp);
-    solution_time.emplace_back(sol_time);
-    int32_t zone_color{-1};
-    fread(&zone_color, 4, 1, fp);
-    int32_t zone_type{0};
-    fread(&zone_type, 4, 1, fp);
-    int32_t var_location{0};
-    fread(&var_location, 4, 1, fp);
-    int32_t raw_face_neighbor{0};
-    fread(&raw_face_neighbor, 4, 1, fp);
-    int32_t miscellaneous_face{0};
-    fread(&miscellaneous_face, 4, 1, fp);
-    integer mx{0}, my{0}, mz{0};
-    fread(&mx, 4, 1, fp);
-    fread(&my, 4, 1, fp);
-    fread(&mz, 4, 1, fp);
-    int32_t auxi_data{1};
-    fread(&auxi_data, 4, 1, fp);
-    while (auxi_data != 0) {
-      auto auxi_name{gxl::read_str(fp)};
-      int32_t auxi_format{0};
-      fread(&auxi_format, 4, 1, fp);
-      auto auxi_val{gxl::read_str(fp)};
-      if (auxi_name == "step") {
-        parameter.update_parameter("step", std::stoi(auxi_val));
-      }
-      fread(&auxi_data, 4, 1, fp);
-    }
-    ++zone_number;
-    fread(&marker, 4, 1, fp);
-  }
-
   // Next, data section
-  for (size_t b = 0; b < mesh.n_block; ++b) {
-    fread(&marker, 4, 1, fp);
-    int32_t data_format{1};
-    for (int l = 0; l < n_var_old; ++l) {
-      fread(&data_format, 4, 1, fp);
-    }
-    size_t data_size{4};
-    if (data_format == 2) {
-      data_size = 8;
-    }
-    int32_t passive_var{0};
-    fread(&passive_var, 4, 1, fp);
-    int32_t shared_var{0};
-    fread(&shared_var, 4, 1, fp);
-    int32_t shared_connect{-1};
-    fread(&shared_connect, 4, 1, fp);
-    double max{0}, min{0};
-    for (int l = 0; l < n_var_old; ++l) {
-      fread(&min, 8, 1, fp);
-      fread(&max, 8, 1, fp);
-    }
+  // Jump the front part for process 0 ~ myid-1
+  integer n_jump_blk{0};
+  for (int i = 0; i < parameter.get_int("myid"); ++i) {
+    n_jump_blk += mesh.nblk[i];
+  }
+  integer i_blk{0};
+  for (int b = 0; b < n_jump_blk; ++b) {
+    offset += 16 + 20 * n_var_old;
+    const integer N = mx[b] * my[b] * mz[b];
+    // We always write double precision out
+    offset += n_var_old * N * 8;
+    ++i_blk;
+  }
+  // Read data of current process
+  for (size_t blk = 0; blk < mesh.n_block; ++blk) {
+    // 1. Zone marker. Value = 299.0, indicates a V112 header.
+    offset += 4;
+    // 2. Variable data format, 2 for double by default
+    offset += 4 * n_var_old;
+    // 3. Has passive variables: 0 = no, 1 = yes.
+    offset += 4;
+    // 4. Has variable sharing 0 = no, 1 = yes.
+    offset += 4;
+    // 5. Zero based zone number to share connectivity list with (-1 = no sharing).
+    offset += 4;
+    // 6. Compressed list of min/max pairs for each non-shared and non-passive variable.
+    offset += 8 * 2 * n_var_old;
     // zone data
     // First, the coordinates x, y and z.
-    const integer mx{mesh[b].mx}, my{mesh[b].my}, mz{mesh[b].mz};
-    for (size_t l = 0; l < 3; ++l) {
-      read_one_useless_variable(fp, mx, my, mz, data_format);
-    }
-
+    const integer N = mx[i_blk] * my[i_blk] * mz[i_blk];
+    offset += 3 * N * 8;
     // Other variables
+    const auto &b = mesh[blk];
+    MPI_Datatype ty;
+    integer lsize[3]{mx[i_blk], my[i_blk], mz[i_blk]};
+    const auto memsz = lsize[0] * lsize[1] * lsize[2] * 8;
+    integer memsize[3]{b.mx + 2 * b.ngg, b.my + 2 * b.ngg, b.mz + 2 * b.ngg};
+    const integer ngg_file{(mx[i_blk] - b.mx) / 2};
+    integer start_idx[3]{b.ngg - ngg_file, b.ngg - ngg_file, b.ngg - ngg_file};
+    MPI_Type_create_subarray(3, memsize, lsize, start_idx, MPI_ORDER_FORTRAN, MPI_DOUBLE, &ty);
+    MPI_Type_commit(&ty);
     for (size_t l = 3; l < n_var_old; ++l) {
       auto index = index_order[l];
       if (index < 6) {
         // basic variables
-        auto &bv = field[b].bv;
-        if (data_format == 1) {
-          // float storage
-          float v{0.0f};
-          for (int k = 0; k < mz; ++k) {
-            for (int j = 0; j < my; ++j) {
-              for (int i = 0; i < mx; ++i) {
-                fread(&v, data_size, 1, fp);
-                bv(i, j, k, index) = v;
-              }
-            }
-          }
-        } else {
-          // double storage
-          for (int k = 0; k < mz; ++k) {
-            for (int j = 0; j < my; ++j) {
-              for (int i = 0; i < mx; ++i) {
-                fread(&bv(i, j, k, index), data_size, 1, fp);
-              }
-            }
-          }
-        }
+        auto bv = field[blk].bv[index];
+        MPI_File_read_at(fp, offset, bv, 1, ty, &status);
+        offset += memsz;
       } else if (index < 6 + n_spec) {
         // If air, n_spec=0;
         // species variables
-        auto &sv = field[b].sv;
         index -= 6;
-        if (data_format == 1) {
-          // float storage
-          float v{0.0f};
-          for (int k = 0; k < mz; ++k) {
-            for (int j = 0; j < my; ++j) {
-              for (int i = 0; i < mx; ++i) {
-                fread(&v, data_size, 1, fp);
-                sv(i, j, k, index) = v;
-              }
-            }
-          }
-        } else {
-          // double storage
-          for (int k = 0; k < mz; ++k) {
-            for (int j = 0; j < my; ++j) {
-              for (int i = 0; i < mx; ++i) {
-                fread(&sv(i, j, k, index), data_size, 1, fp);
-              }
-            }
-          }
-        }
+        auto sv = field[blk].sv[index];
+        MPI_File_read_at(fp, offset, sv, 1, ty, &status);
+        offset += memsz;
       } else if (index < 6 + n_spec + n_turb) {
         // If laminar, n_turb=0
         // turbulent variables
-        auto &sv = field[b].sv;
         index -= 6;
         if (n_turb == old_data_info[1]) {
           // SA from SA or SST from SST
-          if (data_format == 1) {
-            // float storage
-            float v{0.0f};
-            for (int k = 0; k < mz; ++k) {
-              for (int j = 0; j < my; ++j) {
-                for (int i = 0; i < mx; ++i) {
-                  fread(&v, data_size, 1, fp);
-                  sv(i, j, k, index) = v;
-                }
-              }
-            }
-          } else {
-            // double storage
-            for (int k = 0; k < mz; ++k) {
-              for (int j = 0; j < my; ++j) {
-                for (int i = 0; i < mx; ++i) {
-                  fread(&sv(i, j, k, index), data_size, 1, fp);
-                }
-              }
-            }
-          }
+          auto sv = field[blk].sv[index];
+          MPI_File_read_at(fp, offset, sv, 1, ty, &status);
+          offset += memsz;
         } else if (n_turb == 1 && old_data_info[1] == 2) {
           // SA from SST. Currently, just use freestream value to intialize. Modify this later when I write SA
           old_data_info[1] = 0;
@@ -304,10 +464,12 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
         }
       } else {
         // No matched label, just ignore
-        read_one_useless_variable(fp, mx, my, mz, data_format);
+        offset += memsz;
       }
     }
+    ++i_blk;
   }
+  MPI_File_close(&fp);
 
   // Next, if the previous simulation does not contain some of the variables used in the current simulation,
   // then we initialize them here
@@ -321,6 +483,12 @@ read_flowfield(cfd::Parameter &parameter, const cfd::Mesh &mesh, std::vector<Fie
       initialize_turb_from_inflow(parameter, mesh, field, species);
     }
   }
+
+  std::ifstream step_file{"output/message/step.txt"};
+  integer step{0};
+  step_file >> step;
+  step_file.close();
+  parameter.update_parameter("step", step);
 
   if (parameter.get_int("myid") == 0) {
     printf("Flowfield is initialized from previous simulation results.\n");

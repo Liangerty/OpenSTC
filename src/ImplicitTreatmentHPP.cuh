@@ -5,12 +5,13 @@
 #include "DPLURHPP.cuh"
 #include "SST.cuh"
 
-namespace cfd{
+namespace cfd {
 template<MixtureModel mixture_model, TurbMethod turb_method>
-void implicit_treatment(const Block &block, const DParameter *param, DZone *d_ptr, const Parameter& parameter, DZone *h_ptr) {
+void implicit_treatment(const Block &block, const DParameter *param, DZone *d_ptr, const Parameter &parameter,
+                        DZone *h_ptr) {
   switch (parameter.get_int("implicit_method")) {
     case 0: // Explicit
-      if constexpr (mixture_model==MixtureModel::FR){
+      if constexpr (mixture_model == MixtureModel::FR) {
         switch (parameter.get_int("chemSrcMethod")) {
           case 0: // Explicit treat the chemical source
             break;
@@ -19,8 +20,8 @@ void implicit_treatment(const Block &block, const DParameter *param, DZone *d_pt
             break;
         }
       }
-      if constexpr (turb_method==TurbMethod::RANS){
-        if (parameter.get_int("turb_implicit")==1){
+      if constexpr (turb_method == TurbMethod::RANS) {
+        if (parameter.get_int("turb_implicit") == 1) {
           const integer extent[3]{block.mx, block.my, block.mz};
           const integer dim{extent[2] == 1 ? 2 : 3};
           dim3 tpb{8, 8, 4};
@@ -31,7 +32,7 @@ void implicit_treatment(const Block &block, const DParameter *param, DZone *d_pt
           switch (parameter.get_int("RANS_model")) {
             case 1:
             case 2: //SST
-              SST::implicit_treat<<<bpg,tpb>>>(d_ptr);
+              SST::implicit_treat<<<bpg, tpb>>>(d_ptr);
               break;
             default:break;
           }
@@ -40,8 +41,7 @@ void implicit_treatment(const Block &block, const DParameter *param, DZone *d_pt
       return;
     case 1: // DPLUR
       DPLUR<mixture_model, turb_method>(block, param, d_ptr, h_ptr, parameter);
-    default:
-      return;
+    default:return;
   }
 }
 }

@@ -34,6 +34,8 @@ cfd::MpiParallel::MpiParallel(int *argc, char ***argv) {
   }
 
   MPI_Barrier(MPI_COMM_WORLD);
+
+  setup_gpu_device();
 }
 
 double cfd::MpiParallel::get_wall_time() { return MPI_Wtime(); }

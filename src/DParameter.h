@@ -14,21 +14,17 @@ struct DParameter {
   explicit DParameter(Parameter &parameter, Species &species, Reaction &reaction);
 
   integer myid = 0;   // The process id of this process
-//  integer dim = 3;  // The dimension of the simulation problem
-//  integer n_block=1;  // number of blocks in this process
   integer inviscid_scheme = 0;  // The tag for inviscid scheme. 3 - AUSM+
   integer reconstruction = 2; // The reconstruction method for inviscid flux computation
   integer limiter = 0;  // The tag for limiter method
   integer viscous_scheme = 0; // The tag for viscous scheme. 0 - Inviscid, 2 - 2nd order central discretization
   integer rans_model = 0;  // The tag for RANS model. 0 - Laminar, 1 - SA, 2 - SST
   integer turb_implicit = 1;    // If we implicitly treat the turbulent source term. By default, implicitly treat(1), else, 0(explicit)
-  integer implicit_method = 0;  // The tag for implicit treatment method. 0 - explicit, 1 - DPLUR
-  integer DPLUR_inner_step = 2; // If we use DPLUR, then we need a specified number of inner iterations.
   integer chemSrcMethod = 0;  // For finite rate chemistry, we need to know how to implicitly treat the chemical source
-//  integer output_screen=10; // determine the interval between screen outputs
+  integer n_spec = 0;
+  integer n_scalar = 0;
   real Pr = 0.72;
   real cfl = 1;
-  integer n_spec = 0;
   real *mw = nullptr;
   ggxl::MatrixDyn<real> high_temp_coeff, low_temp_coeff;
   real *t_low = nullptr, *t_mid = nullptr, *t_high = nullptr;
@@ -39,23 +35,14 @@ struct DParameter {
   real Sc = 0.9;
   real Prt = 0.9;
   real Sct = 0.9;
-  integer n_scalar = 0;
 
 private:
   struct LimitFlow {
     // ll for lower limit, ul for upper limit.
-
-    static constexpr integer max_n_var = 5 + 2;// + MAX_SPEC_NUMBER
+    static constexpr integer max_n_var = 5 + 2;
     real ll[max_n_var];
     real ul[max_n_var];
     real sv_inf[MAX_SPEC_NUMBER + 2];
-
-//    /*static */real dll = 1e-6; // density lower limit
-//    /*static */real dul = 1e+3; // density upper limit
-//    /*static */real pll = 1e-6; // pressure lower limit
-//    /*static */real pul = 1e+3; // pressure upper limit
-//    /*static */real vul = 1e+3; // velocity upper limit
-    // real sll=1e-20; // scalar lower limit, should be 0.
   };
 
 public:

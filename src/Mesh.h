@@ -100,6 +100,7 @@ struct ParallelFace {
    * @loop_order.
    */
   integer loop_dir[3]{1, 1, 1};
+  integer n_point[3]{0, 0, 0};
 };
 
 /**
@@ -149,14 +150,6 @@ public:
    *             \f]
    */
   gxl::Array3D<gxl::Matrix<real, 3, 3, 1>> metric;
-#ifdef GPU
-//  ggxl::Array3D<real> d_x, d_y, d_z;
-//  Boundary *d_bound;
-//  InnerFace *d_innerface;
-//  ParallelFace *d_parface;
-//  ggxl::Array3D<real> d_jac;
-//  ggxl::Array3D<gxl::Matrix<real, 3, 3, 1>> d_metric;
-#endif
 };
 
 class Parameter;
@@ -167,6 +160,13 @@ public:
   integer n_block = 1;
   integer n_grid = 1;
   integer n_grid_total = 1;
+  integer n_block_total = 1;
+  integer n_proc = 1;
+  integer ngg = 2;
+  integer *nblk = nullptr;
+  integer *mx_blk = nullptr;
+  integer *my_blk = nullptr;
+  integer *mz_blk = nullptr;
 private:
   std::vector<Block> block;
 
@@ -178,28 +178,28 @@ public:
   const Block &operator[](size_t i) const;
 
 private:
-  void read_grid(integer myid, integer ngg);
+  void read_grid(integer myid/*, integer ngg*/);
 
   /**
    * \brief read the physical boundary of current process
    * \param myid the process id of current process
    * \param ngg number of ghost layers
    */
-  void read_boundary(integer myid, integer ngg);
+  void read_boundary(integer myid/*, integer ngg*/);
 
   /**
    * \brief read the inner face communication message of current process
    * \param myid the process id of current process
    * \param ngg number of ghost layers
    */
-  void read_inner_interface(integer myid, integer ngg);
+  void read_inner_interface(integer myid/*, integer ngg*/);
 
   /**
    * \brief read the parallel boundary coordinates. Do not read the target face or match them, left for solver initialization
    * \param myid process number, used for identify which file to read
    * \param ngg number of ghost grids in each direction
    */
-  void read_parallel_interface(integer myid, integer ngg);
+  void read_parallel_interface(integer myid/*, integer ngg*/);
 
   /**
    * \brief scale all coordinates (x/y/z) to unit of meters.
@@ -215,7 +215,7 @@ private:
    * \param parallel if the computation is conducted in parallel
    * \param ngg number of ghost layers
    */
-  void init_ghost_grid(integer myid, bool parallel, integer ngg);
+  void init_ghost_grid(integer myid, bool parallel/*, integer ngg*/);
 
   /**
    * \brief called by @init_ghost_grid, used for initializing ghost grids of the inner faces
@@ -227,8 +227,6 @@ private:
    * \param myid process number, used for identify which file to read
    * \param ngg number of ghost layers
    */
-  void init_parallel_ghost_grid(integer myid, integer ngg);
-
-//  void copy_mesh_to_device();
+  void init_parallel_ghost_grid(integer myid/*, integer ngg*/);
 };
 }

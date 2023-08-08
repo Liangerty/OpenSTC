@@ -2,6 +2,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <mpi.h>
 
 namespace gxl {
 // Some string functions
@@ -24,4 +25,6 @@ std::string to_upper(const std::string& str);
 
 void write_str(const char *str, FILE *file);
 std::string read_str(FILE* file);
+std::string read_str_from_plt_MPI_ver(MPI_File &file, MPI_Offset &offset);
+std::string read_str_MPI_ver(MPI_File &file, MPI_Offset &offset, int n_bytes);
 }

@@ -16,9 +16,9 @@ struct DZone {
 
   integer mx = 0, my = 0, mz = 0, ngg = 0, n_spec = 0, n_scal = 0, n_var = 5;
   ggxl::Array3D<real> x, y, z;
-  Boundary *boundary= nullptr;
-  InnerFace *innerface= nullptr;
-  ParallelFace *parface= nullptr;
+  Boundary *boundary = nullptr;
+  InnerFace *innerface = nullptr;
+  ParallelFace *parface = nullptr;
   ggxl::Array3D<real> jac;
   ggxl::Array3D<gxl::Matrix<real, 3, 3, 1>> metric;
   ggxl::Array3D<real> wall_distance;
@@ -57,24 +57,32 @@ struct DZone {
 #endif
 
 template<MixtureModel mix_model, TurbMethod turb_method>
-struct Field{
+struct Field {
   Field(Parameter &parameter, const Block &block_in);
 
-  void initialize_basic_variables(const Parameter &parameter, const std::vector<Inflow<mix_model,turb_method>> &inflows,
-                                  const std::vector<real> &xs, const std::vector<real> &xe, const std::vector<real> &ys,
-                                  const std::vector<real> &ye, const std::vector<real> &zs,
-                                  const std::vector<real> &ze);
+  void
+  initialize_basic_variables(const Parameter &parameter, const std::vector<Inflow<mix_model, turb_method>> &inflows,
+                             const std::vector<real> &xs, const std::vector<real> &xe, const std::vector<real> &ys,
+                             const std::vector<real> &ye, const std::vector<real> &zs,
+                             const std::vector<real> &ze);
 
   void setup_device_memory(const Parameter &parameter);
 
   void copy_data_from_device();
-  
-  const Block& block;
-  gxl::VectorField3D<real> cv;  // Is it used in data communication? If not, this can be deleted, because all computations including cv are executed on GPU
-  gxl::VectorField3D<real> bv;  // basic variables, including density, u, v, w, p, temperature
-  gxl::VectorField3D<real> sv;  // passive scalar variables, including species mass fractions, turbulent variables, mixture fractions, etc.
-  gxl::VectorField3D<real> ov;  // other variables used in the computation, e.g., the Mach number, the mut in turbulent computation, scalar dissipation rate in flamelet, etc.
-  gxl::VectorField3D<real> var_without_ghost_grid; // Some variables that only stored on core grids.
+
+  integer n_var = 5;
+  const Block &block;
+//  ggxl::VectorField3DHost<real> cv;  // Is it used in data communication? If not, this can be deleted, because all computations including cv are executed on GPU
+  ggxl::VectorField3DHost<real> bv;  // basic variables, including density, u, v, w, p, temperature
+  ggxl::VectorField3DHost<real> sv;  // passive scalar variables, including species mass fractions, turbulent variables, mixture fractions, etc.
+  ggxl::VectorField3DHost<real> ov;  // other variables used in the computation, e.g., the Mach number, the mut in turbulent computation, scalar dissipation rate in flamelet, etc.
+//  ggxl::VectorField3DHost<real> var_without_ghost_grid; // Some variables that only stored on core grids.
+
+//  gxl::VectorField3D<real> cv;  // Is it used in data communication? If not, this can be deleted, because all computations including cv are executed on GPU
+//  gxl::VectorField3D<real> bv;  // basic variables, including density, u, v, w, p, temperature
+//  gxl::VectorField3D<real> sv;  // passive scalar variables, including species mass fractions, turbulent variables, mixture fractions, etc.
+//  gxl::VectorField3D<real> ov;  // other variables used in the computation, e.g., the Mach number, the mut in turbulent computation, scalar dissipation rate in flamelet, etc.
+//  gxl::VectorField3D<real> var_without_ghost_grid; // Some variables that only stored on core grids.
 #ifdef GPU
   DZone *d_ptr = nullptr;
   DZone *h_ptr = nullptr;

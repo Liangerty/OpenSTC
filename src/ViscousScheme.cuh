@@ -82,8 +82,8 @@ __device__ void compute_fv_2nd_order(const integer idx[3], DZone *zone, real *fv
   if constexpr (turb_method == TurbMethod::RANS) {
     if (param->rans_model == 2) {
       // SST
-      const real twoThirdrhoKm =
-          -2.0 / 3 * 0.5 * (zone->cv(i, j, k, zone->n_spec + 5) + zone->cv(i + 1, j, k, zone->n_spec + 5));
+      const real twoThirdrhoKm = -2.0 / 3 * 0.5 * (pv(i, j, k, 0) * zone->sv(i, j, k, zone->n_spec) +
+                                                   pv(i + 1, j, k, 0) * zone->sv(i + 1, j, k, zone->n_spec));
       tau_xx += twoThirdrhoKm;
       tau_yy += twoThirdrhoKm;
       tau_zz += twoThirdrhoKm;
@@ -282,8 +282,8 @@ __device__ void compute_gv_2nd_order(const integer *idx, DZone *zone, real *gv, 
   if constexpr (turb_method == TurbMethod::RANS) {
     if (param->rans_model == 2) {
       // SST
-      const real twoThirdrhoKm =
-          -2 / 3 * 0.5 * (zone->cv(i, j, k, zone->n_spec + 5) + zone->cv(i, j + 1, k, zone->n_spec + 5));
+      const real twoThirdrhoKm = -2.0 / 3 * 0.5 * (pv(i, j, k, 0) * zone->sv(i, j, k, zone->n_spec) +
+                                                   pv(i, j + 1, k, 0) * zone->sv(i, j + 1, k, zone->n_spec));
       tau_xx += twoThirdrhoKm;
       tau_yy += twoThirdrhoKm;
       tau_zz += twoThirdrhoKm;
@@ -478,8 +478,8 @@ __device__ void compute_hv_2nd_order(const integer *idx, DZone *zone, real *hv, 
   if constexpr (turb_method == TurbMethod::RANS) {
     if (param->rans_model == 2) {
       // SST
-      const real twoThirdrhoKm =
-          -2.0 / 3 * 0.5 * (zone->cv(i, j, k, zone->n_spec + 5) + zone->cv(i, j, k + 1, zone->n_spec + 5));
+      const real twoThirdrhoKm = -2.0 / 3 * 0.5 * (pv(i, j, k, 0) * zone->sv(i, j, k, zone->n_spec) +
+                                                   pv(i, j, k + 1, 0) * zone->sv(i, j, k + 1, zone->n_spec));
       tau_xx += twoThirdrhoKm;
       tau_yy += twoThirdrhoKm;
       tau_zz += twoThirdrhoKm;

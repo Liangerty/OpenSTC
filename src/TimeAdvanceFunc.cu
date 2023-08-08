@@ -69,8 +69,8 @@ __global__ void cfd::limit_flow(cfd::DZone *zone, cfd::DParameter *param, intege
   if (unphysical) {
     // printf("Unphysical values appear in process %d, block %d, i = %d, j = %d, k = %d.\n", param->myid, blk_id, i, j, k);
 
-    real updated_var[n_flow_var + MAX_SPEC_NUMBER];
-    memset(updated_var, 0, (n_flow_var + MAX_SPEC_NUMBER) * sizeof(real));
+    real updated_var[n_flow_var + MAX_SPEC_NUMBER + 2];
+    memset(updated_var, 0, (n_flow_var + MAX_SPEC_NUMBER + 2) * sizeof(real));
     integer kn{0};
     // Compute the sum of all "good" points surrounding the "bad" point
     for (integer ka = -1; ka < 2; ++ka) {
@@ -97,7 +97,7 @@ __global__ void cfd::limit_flow(cfd::DZone *zone, cfd::DParameter *param, intege
           updated_var[3] += bv(i1, j1, k1, 3);
           updated_var[4] += bv(i1, j1, k1, 4);
 
-          for (integer l = 0; l < n_spec; ++l) {
+          for (integer l = 0; l < zone->n_scal; ++l) {
             updated_var[l + 5] += sv(i1, j1, k1, l);
           }
 
@@ -109,7 +109,7 @@ __global__ void cfd::limit_flow(cfd::DZone *zone, cfd::DParameter *param, intege
     // Compute the average of the surrounding points
     if (kn > 0) {
       const real kn_inv{1.0 / kn};
-      for (integer l = 0; l < n_flow_var + n_spec; ++l) {
+      for (integer l = 0; l < n_flow_var + zone->n_scal; ++l) {
         updated_var[l] *= kn_inv;
       }
     } else {
@@ -118,7 +118,7 @@ __global__ void cfd::limit_flow(cfd::DZone *zone, cfd::DParameter *param, intege
         updated_var[l] = max(var[l], ll[l]);
         updated_var[l] = min(updated_var[l], ul[l]);
       }
-      for (integer l = 0; l < n_spec; ++l) {
+      for (integer l = 0; l < zone->n_scal; ++l) {
         updated_var[l + 5] = param->limit_flow.sv_inf[l];
       }
     }
@@ -136,7 +136,7 @@ __global__ void cfd::limit_flow(cfd::DZone *zone, cfd::DParameter *param, intege
     cv(i, j, k, 3) = updated_var[0] * updated_var[3];
     cv(i, j, k, 4) = 0.5 * updated_var[0] * (updated_var[1] * updated_var[1] + updated_var[2] * updated_var[2] +
                                              updated_var[3] * updated_var[3]);
-    for (integer l = 0; l < n_spec; ++l) {
+    for (integer l = 0; l < zone->n_scal; ++l) {
       sv(i, j, k, l) = updated_var[5 + l];
       cv(i, j, k, 5 + l) = updated_var[0] * updated_var[5 + l];
     }
@@ -175,9 +175,6 @@ __global__ void cfd::limit_flow(cfd::DZone *zone, cfd::DParameter *param, intege
     }
 
     if (unphysical) {
-      // printf("Unphysical turbulent values appear in process %d, block %d, i = %d, j = %d, k = %d.\n", param->myid,
-      //        blk_id, i, j, k);
-
       real updated_var[n_turb];
       memset(updated_var, 0, n_turb * sizeof(real));
       integer kn{0};
