@@ -59,6 +59,21 @@ void gxl::read_until(std::ifstream &file, std::string &input,
   fmt::print("{} is not found in file.\n", to_find);
 }
 
+void gxl::read_until(std::ifstream &file, std::string &input, const std::vector<std::string> &to_find, Case u_l) {
+  while (getline(file, input, u_l)) {
+    for(auto& s:to_find){
+      if (input.starts_with(s)){
+        return;
+      }
+    }
+  }
+  input = "end"; // 若没找到，就赋值为"end"代表结束了
+  for(auto& s:to_find){
+    fmt::print("{}\t", s);
+  }
+  fmt::print("are not found in file.\n");
+}
+
 std::string gxl::to_upper(std::string &str) {
   for (auto &ch: str) {
     ch = std::toupper(ch);

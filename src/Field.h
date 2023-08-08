@@ -6,7 +6,6 @@
 #include "Mesh.h"
 
 namespace cfd {
-template<MixtureModel mix_model, TurbMethod turb_method>
 struct Inflow;
 
 #ifdef GPU
@@ -27,7 +26,6 @@ struct DZone {
   ggxl::VectorField3D<real> bv; // Basic variable: 0-density, 1-u, 2-v, 3-w, 4-pressure, 5-temperature
   ggxl::VectorField3D<real> sv; // Scalar variables: [0,n_spec) - mass fractions; [n_spec,n_spec+n_turb) - turbulent variables
   ggxl::VectorField3D<real> bv_last; // Basic variable of last step
-//  ggxl::VectorField3D<real> residual; // The residual of density, velocity magnitude, pressure, and temperature
   ggxl::Array3D<real> vel;      // Velocity magnitude
   ggxl::Array3D<real> acoustic_speed;
   ggxl::Array3D<real> mach;     // Mach number
@@ -38,6 +36,10 @@ struct DZone {
   ggxl::VectorField3D<real> rho_D; // the mass diffusivity of species
   ggxl::Array3D<real> gamma;  // specific heat ratio
   ggxl::Array3D<real> cp;   // specific heat for constant pressure
+
+  // chemical jacobian matrix or diagonal
+  ggxl::VectorField3D<real> chem_src_jac;
+
   // Turbulent variables
   ggxl::Array3D<real> mut;  // turbulent viscosity
   ggxl::Array3D<real> turb_therm_cond; // turbulent thermal conductivity
@@ -56,19 +58,19 @@ struct DZone {
 
 #endif
 
-template<MixtureModel mix_model, TurbMethod turb_method>
+//template<MixtureModel mix_model, TurbMethod turb_method>
 struct Field {
   Field(Parameter &parameter, const Block &block_in);
 
   void
-  initialize_basic_variables(const Parameter &parameter, const std::vector<Inflow<mix_model, turb_method>> &inflows,
+  initialize_basic_variables(const Parameter &parameter, const std::vector<Inflow> &inflows,
                              const std::vector<real> &xs, const std::vector<real> &xe, const std::vector<real> &ys,
                              const std::vector<real> &ye, const std::vector<real> &zs,
                              const std::vector<real> &ze);
 
   void setup_device_memory(const Parameter &parameter);
 
-  void copy_data_from_device();
+  void copy_data_from_device(const Parameter &parameter);
 
   integer n_var = 5;
   const Block &block;
@@ -78,11 +80,6 @@ struct Field {
   ggxl::VectorField3DHost<real> ov;  // other variables used in the computation, e.g., the Mach number, the mut in turbulent computation, scalar dissipation rate in flamelet, etc.
 //  ggxl::VectorField3DHost<real> var_without_ghost_grid; // Some variables that only stored on core grids.
 
-//  gxl::VectorField3D<real> cv;  // Is it used in data communication? If not, this can be deleted, because all computations including cv are executed on GPU
-//  gxl::VectorField3D<real> bv;  // basic variables, including density, u, v, w, p, temperature
-//  gxl::VectorField3D<real> sv;  // passive scalar variables, including species mass fractions, turbulent variables, mixture fractions, etc.
-//  gxl::VectorField3D<real> ov;  // other variables used in the computation, e.g., the Mach number, the mut in turbulent computation, scalar dissipation rate in flamelet, etc.
-//  gxl::VectorField3D<real> var_without_ghost_grid; // Some variables that only stored on core grids.
 #ifdef GPU
   DZone *d_ptr = nullptr;
   DZone *h_ptr = nullptr;

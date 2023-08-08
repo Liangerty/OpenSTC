@@ -59,3 +59,21 @@ __device__ void cfd::compute_cp(real t, real *cp, cfd::DParameter *param) {
     cp[i] *= R_u / param->mw[i];
   }
 }
+
+__device__ void cfd::compute_gibbs_div_rt(real t, const cfd::DParameter *param, real *gibbs_rt) {
+  const real t2{t * t}, t3{t2 * t}, t4{t3 * t}, t_inv{1 / t}, log_t{std::log(t)};
+  for (int i = 0; i < param->n_spec; ++i) {
+    if (t < param->t_low[i]) {
+      const real tt = param->t_low[i];
+      const real tt2 = tt * tt, tt3 = tt2 * tt, tt4 = tt3 * tt, tt_inv = 1 / tt, log_tt = std::log(tt);
+      const auto &coeff = param->low_temp_coeff;
+      gibbs_rt[i] = coeff(i, 0) * (1.0 - log_tt) - 0.5 * coeff(i, 1) * tt - coeff(i, 2) * tt2 / 6.0 -
+                    coeff(i, 3) * tt3 / 12.0 - coeff(i, 4) * tt4 * 0.05 + coeff(i, 5) * tt_inv - coeff(i, 6);
+    } else {
+      const auto &coeff = t < param->t_mid[i] ? param->low_temp_coeff : param->high_temp_coeff;
+      gibbs_rt[i] =
+          coeff(i, 0) * (1.0 - log_t) - 0.5 * coeff(i, 1) * t - coeff(i, 2) * t2 / 6.0 - coeff(i, 3) * t3 / 12.0 -
+          coeff(i, 4) * t4 * 0.05 + coeff(i, 5) * t_inv - coeff(i, 6);
+    }
+  }
+}

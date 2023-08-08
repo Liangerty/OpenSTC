@@ -18,12 +18,11 @@ class Output {
 public:
   const int myid{0};
   const Mesh &mesh;
-  std::vector<cfd::Field<mix_model, turb_method>> &field;
+  std::vector<cfd::Field> &field;
   const Parameter &parameter;
   const Species &species;
 
-  Output(integer _myid, const Mesh &_mesh, std::vector<Field<mix_model, turb_method>> &_field,
-         const Parameter &_parameter,
+  Output(integer _myid, const Mesh &_mesh, std::vector<Field> &_field, const Parameter &_parameter,
          const Species &spec);
 
   int32_t acquire_variable_names(std::vector<std::string> &var_name) const;
@@ -69,7 +68,7 @@ template<MixtureModel mix_model, TurbMethod turb_method>
 void Output<mix_model, turb_method>::print_field(integer step, int ngg) const {
   // Copy data from GPU to CPU
   for (auto &f: field) {
-    f.copy_data_from_device();
+    f.copy_data_from_device(parameter);
   }
 
   const std::filesystem::path out_dir("output/field");
@@ -334,22 +333,11 @@ void Output<mix_model, turb_method>::print_field(integer step, int ngg) const {
   fclose(fp);
 }
 
-//void write_str(const char *str, FILE *file);
-
 // Implementations
 template<MixtureModel mix_model, TurbMethod turb_method>
-Output<mix_model, turb_method>::Output(integer
-                                       _myid,
-                                       const cfd::Mesh &_mesh,
-                                       std::vector<Field<mix_model, turb_method>>
-                                       &_field,
-                                       const cfd::Parameter &_parameter,
-                                       const cfd::Species &spec): myid{_myid},
-                                                                  mesh{_mesh},
-                                                                  field(_field),
-                                                                  parameter{
-                                                                      _parameter},
-                                                                  species{spec} {
+Output<mix_model, turb_method>::Output(integer _myid, const cfd::Mesh &_mesh, std::vector<Field> &_field,
+                                       const cfd::Parameter &_parameter, const cfd::Species &spec):
+    myid{_myid}, mesh{_mesh}, field(_field), parameter{_parameter}, species{spec} {
   const std::filesystem::path out_dir("output/field");
   if (!exists(out_dir)) {
     create_directories(out_dir);

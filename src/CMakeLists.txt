@@ -1,8 +1,7 @@
 # There are several options need to be set here
 # 1. "CMAKE_CUDA_ARCHITECTURES", the CUDA architecture should be specified
 #     For example, for Nvidia Quadro GP100, the value should be 60, while for GV100, 70
-# 2. "MULTISPECIES" Whether the simulation is for mixture(1) or air(0),
-# 3. "MAX_SPEC_NUMBER" if mixture, the number of species should not beyond 55, which is set by allowing the computation of CH4 in Grimech mechanism.
+# 2. "MAX_SPEC_NUMBER" if mixture, the number of species should not beyond 55, which is set by allowing the computation of CH4 in Grimech mechanism.
 #     If larger mechanism is to be used, the variable should be modified to be larger or equal to the species number.
 #     However, the correctness, if the resource is available for the corresponding kernel may need to be tested.
 
@@ -11,7 +10,7 @@ list(APPEND src_file
   ChemData.h ChemData.cpp Constants.h
   DataCommunication.cuh DataCommunication.cu Define.h DParameter.cu DParameter.h DPLURHPP.cuh Driver.cu Driver.cuh
   Element.h Element.cpp
-  Field.h Field.cu FieldOperation.cuh FieldOperation.cu
+  Field.h Field.cu FieldOperation.cuh FieldOperation.cu FiniteRateChem.cu FiniteRateChem.cuh
   ImplicitTreatmentHPP.cuh Initialize.cuh Initialize.cu InviscidScheme.cuh
   Limiter.cuh
   main.cu Mesh.h Mesh.cpp MPIIO.hpp MPIIO.cu

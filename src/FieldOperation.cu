@@ -1,5 +1,4 @@
 #include "FieldOperation.cuh"
-#include "DParameter.h"
 
 __device__ void cfd::compute_temperature(int i, int j, int k, const cfd::DParameter *param, cfd::DZone *zone) {
   const integer n_spec = param->n_spec;

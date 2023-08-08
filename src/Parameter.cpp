@@ -82,10 +82,18 @@ void cfd::Parameter::read_one_file(std::ifstream &file) {
       line >> val;
       string_parameters.emplace(std::make_pair(key, val));
     } else if (type == "array") {
-      if (key == "real") {
+      if (key == "int") {
+        std::vector<int> arr;
+        std::string name{temp};
+        line >> temp; // {
+        while (read_line_to_array(line, arr)) {
+          gxl::getline_to_stream(file, input, line);
+        }
+        int_array.emplace(std::make_pair(name, arr));
+      } else if (key == "real") {
         std::vector<real> arr;
         std::string name{temp};
-        line >> temp >> temp; // = {
+        line >> temp; // {
         while (read_line_to_array(line, arr)) {
           gxl::getline_to_stream(file, input, line);
         }

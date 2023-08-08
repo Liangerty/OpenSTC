@@ -6,7 +6,6 @@
 #include "ChemData.h"
 #include "Field.h"
 #include "BoundCond.cuh"
-#include "Output.hpp"
 
 namespace cfd {
 
@@ -37,10 +36,10 @@ public:
   const Parameter &parameter;
   Species spec;
   Reaction reac;
-  std::vector<cfd::Field<mix_model, turb_method>> field; // The flowfield data of the simulation. Every block is a "Field" object
+  std::vector<cfd::Field> field; // The flowfield data of the simulation. Every block is a "Field" object
 #ifdef GPU
   DParameter *param = nullptr; // The parameters used for GPU simulation, data are stored on GPU while the pointer is on CPU
-  DBoundCond<mix_model, turb_method> bound_cond;  // Boundary conditions
+  DBoundCond bound_cond;  // Boundary conditions
 #endif
   std::array<real, 4> res{1, 1, 1, 1};
   std::array<real, 4> res_scale{1, 1, 1, 1};

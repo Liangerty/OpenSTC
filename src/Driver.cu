@@ -1,30 +1,27 @@
 #include "Driver.cuh"
-#include "ViscousScheme.cuh"
-#include "FieldOperation.cuh"
-#include "TimeAdvanceFunc.cuh"
-#include "DataCommunication.cuh"
 #include "Initialize.cuh"
-#include "SchemeSelector.cuh"
-#include <filesystem>
-#include "Parallel.h"
-#include <iostream>
-#include <mpi.h>
+#include "DataCommunication.cuh"
+#include "TimeAdvanceFunc.cuh"
 #include "SourceTerm.cuh"
-#include "PostProcess.h"
+#include "SchemeSelector.cuh"
 #include "ImplicitTreatmentHPP.cuh"
+#include "Parallel.h"
+#include "PostProcess.h"
+#include "MPIIO.hpp"
 
 namespace cfd {
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 Driver<mix_model, turb_method>::Driver(Parameter &parameter, Mesh &mesh_):
     myid(parameter.get_int("myid")), time(), mesh(mesh_), parameter(parameter),
-    spec(parameter), reac(parameter) {
+    spec(parameter), reac(parameter, spec) {
   // Allocate the memory for every block
   for (integer blk = 0; blk < mesh.n_block; ++blk) {
     field.emplace_back(parameter, mesh[blk]);
   }
 
-  initialize_basic_variables(parameter, mesh, field, spec);
+  initialize_basic_variables<mix_model, turb_method>(parameter, mesh, field, spec);
+
   if (parameter.get_int("initial") == 1) {
     // If continue from previous results, then we need the residual scales
     // If the file does not exist, then we have a trouble
@@ -69,7 +66,7 @@ void Driver<mix_model, turb_method>::initialize_computation() {
 
   // Second, apply boundary conditions to all boundaries, including face communication between faces
   for (integer b = 0; b < mesh.n_block; ++b) {
-    bound_cond.apply_boundary_conditions(mesh[b], field[b], param);
+    bound_cond.apply_boundary_conditions<mix_model, turb_method>(mesh[b], field[b], param);
   }
   if (myid == 0) {
     printf("Boundary conditions are applied successfully for initialization\n");
@@ -254,7 +251,7 @@ void Driver<mix_model, turb_method>::steady_simulation() {
       limit_flow<<<bpg[b], tpb>>>(field[b].d_ptr, param, b);
 
       // apply boundary conditions
-      bound_cond.apply_boundary_conditions(mesh[b], field[b], param);
+      bound_cond.apply_boundary_conditions<mix_model, turb_method>(mesh[b], field[b], param);
     }
     // Third, transfer data between and within processes
     data_communication<mix_model, turb_method>(mesh, field, parameter, step, param);
@@ -285,7 +282,7 @@ void Driver<mix_model, turb_method>::steady_simulation() {
     cudaDeviceSynchronize();
     if (step % output_file == 0 || converged) {
       mpiio.print_field(step);
-//      post_process();
+      post_process();
     }
   }
   delete[] bpg;
@@ -405,7 +402,16 @@ void Driver<mix_model, turb_method>::steady_screen_output(integer step, real err
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 void Driver<mix_model, turb_method>::post_process() {
-  wall_friction_heatflux_2d(mesh, field, parameter);
+  static const std::vector<integer> processes{parameter.get_int_array("post_process")};
+
+  for (auto process:processes){
+    switch (process) {
+      case 0: // Compute the 2D cf/qw
+        wall_friction_heatflux_2d(mesh, field, parameter);
+        break;
+      default:break;
+    }
+  }
 }
 
 template<integer N>
