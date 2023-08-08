@@ -1,0 +1,39 @@
+﻿// Specify information about how to initialize.
+// May specify various parts to initialize, if not, the whole flowfield is initialized with the first farfield boundary.
+// First specify how many groups there are to initialize.
+int groups_init = 1
+
+// Every simulation must specify a default inflow condition to be used,
+// the name should be the same as the corresponding struct name.
+// All points except those specified to be initialized with a different condition below are initialized by this.
+string  default_init    =   freestream
+
+// If the @groups_init is larger than 1, then other conditions may be used for some part to initialize
+struct  init_cond_0     {
+    string      label   =   fuel   // The part to be initialized differently from above, 8 real numbers are to be specified
+    real        x0      =   0
+    real        x1      =   1
+    real        y0      =   -1
+    real        y1      =   100
+    real        z0      =   -1
+    real        z1      =   100
+}
+
+// Also, there may be some conditions not given by the bcs, then we can also specify it here
+// We do not tell a label here, and the program would know that it needs to read a new set of condition here
+struct  init_cond_1 {
+    real    x0      =   0
+    real    x1      =   1
+    real    y0      =   -1
+    real    y1      =   100
+    real    z0      =   -1
+    real    z1      =   100
+    real    mach    =   1
+    real    pressure    =   101222
+    real    temperature =   500
+    real    u       =   1
+    real    v       =   0
+    real    w       =   0
+    real    mole_or_mass    =   1
+    real    H2              =   1
+}

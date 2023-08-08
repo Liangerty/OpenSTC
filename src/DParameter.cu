@@ -11,6 +11,9 @@ cfd::DParameter::DParameter(cfd::Parameter &parameter, Species &species, Reactio
   const auto &spec = species;
   n_spec = spec.n_spec;
   n_scalar = parameter.get_int("n_scalar");
+  n_reac = reaction.n_reac;
+
+  // species info
   auto mem_sz = n_spec * sizeof(real);
   cudaMalloc(&mw, mem_sz);
   cudaMemcpy(mw, spec.mw.data(), mem_sz, cudaMemcpyHostToDevice);
@@ -37,6 +40,40 @@ cfd::DParameter::DParameter(cfd::Parameter &parameter, Species &species, Reactio
   cudaMemcpy(sqrt_WiDivWjPl1Mul8.data(), spec.sqrt_WiDivWjPl1Mul8.data(),
              sqrt_WiDivWjPl1Mul8.size() * sizeof(real), cudaMemcpyHostToDevice);
   Sc = parameter.get_real("schmidt_number");
+
+  // reactions info
+  cudaMalloc(&reac_type, n_reac * sizeof(integer));
+  cudaMemcpy(reac_type, reaction.label.data(), n_reac * sizeof(integer), cudaMemcpyHostToDevice);
+  stoi_f.init_with_size(n_reac, n_spec);
+  cudaMemcpy(stoi_f.data(), reaction.stoi_f.data(), stoi_f.size() * sizeof(integer), cudaMemcpyHostToDevice);
+  stoi_b.init_with_size(n_reac, n_spec);
+  cudaMemcpy(stoi_b.data(), reaction.stoi_b.data(), stoi_b.size() * sizeof(integer), cudaMemcpyHostToDevice);
+  mem_sz = n_reac * sizeof(real);
+  cudaMalloc(&reac_order, n_reac * sizeof(integer));
+  cudaMemcpy(reac_order, reaction.order.data(), n_reac * sizeof(integer), cudaMemcpyHostToDevice);
+  cudaMalloc(&A, mem_sz);
+  cudaMemcpy(A, reaction.A.data(), mem_sz, cudaMemcpyHostToDevice);
+  cudaMalloc(&b, mem_sz);
+  cudaMemcpy(b, reaction.b.data(), mem_sz, cudaMemcpyHostToDevice);
+  cudaMalloc(&Ea, mem_sz);
+  cudaMemcpy(Ea, reaction.Ea.data(), mem_sz, cudaMemcpyHostToDevice);
+  cudaMalloc(&A2, mem_sz);
+  cudaMemcpy(A2, reaction.A2.data(), mem_sz, cudaMemcpyHostToDevice);
+  cudaMalloc(&b2, mem_sz);
+  cudaMemcpy(b2, reaction.b2.data(), mem_sz, cudaMemcpyHostToDevice);
+  cudaMalloc(&Ea2, mem_sz);
+  cudaMemcpy(Ea2, reaction.Ea2.data(), mem_sz, cudaMemcpyHostToDevice);
+  third_body_coeff.init_with_size(n_reac, n_spec);
+  cudaMemcpy(third_body_coeff.data(), reaction.third_body_coeff.data(), third_body_coeff.size() * sizeof(real),
+             cudaMemcpyHostToDevice);
+  cudaMalloc(&troe_alpha, mem_sz);
+  cudaMemcpy(troe_alpha, reaction.troe_alpha.data(), mem_sz, cudaMemcpyHostToDevice);
+  cudaMalloc(&troe_t3, mem_sz);
+  cudaMemcpy(troe_t3, reaction.troe_t3.data(), mem_sz, cudaMemcpyHostToDevice);
+  cudaMalloc(&troe_t1, mem_sz);
+  cudaMemcpy(troe_t1, reaction.troe_t1.data(), mem_sz, cudaMemcpyHostToDevice);
+  cudaMalloc(&troe_t2, mem_sz);
+  cudaMemcpy(troe_t2, reaction.troe_t2.data(), mem_sz, cudaMemcpyHostToDevice);
 
   memset(limit_flow.ll, 0, sizeof(real) * LimitFlow::max_n_var);
   memset(limit_flow.ul, 0, sizeof(real) * LimitFlow::max_n_var);

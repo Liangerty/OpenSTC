@@ -37,14 +37,12 @@ template<MixtureModel mix_model, TurbMethod turb_method>
 void
 compute_inviscid_flux(const Block &block, cfd::DZone *zone, DParameter *param, const integer n_var) {
   const integer extent[3]{block.mx, block.my, block.mz};
-  const integer ngg{block.ngg};
-  const integer dim{extent[2] == 1 ? 2 : 3};
-  constexpr integer block_dim = 64;
-  const integer n_computation_per_block = block_dim + 2 * ngg - 1;
+  constexpr integer block_dim = 128;
+  const integer n_computation_per_block = block_dim + 2 * block.ngg - 1;
   const auto shared_mem = (block_dim * n_var // fc
                            + n_computation_per_block * (n_var + 3 + 1)) * sizeof(real); // pv[n_var]+metric[3]+jacobian
 
-  for (auto dir = 0; dir < dim; ++dir) {
+  for (auto dir = 0; dir < 2; ++dir) {
     integer tpb[3]{1, 1, 1};
     tpb[dir] = block_dim;
     integer bpg[3]{extent[0], extent[1], extent[2]};
@@ -53,6 +51,19 @@ compute_inviscid_flux(const Block &block, cfd::DZone *zone, DParameter *param, c
     dim3 TPB(tpb[0], tpb[1], tpb[2]);
     dim3 BPG(bpg[0], bpg[1], bpg[2]);
     inviscid_flux_1d<mix_model, turb_method><<<BPG, TPB, shared_mem>>>(zone, dir, extent[dir], param);
+  }
+
+  if (extent[2] > 1) {
+    // 3D computation
+    // Number of threads in the 3rd direction cannot exceed 64
+    integer tpb[3]{1, 1, 1};
+    tpb[2] = 64;
+    integer bpg[3]{extent[0], extent[1], extent[2]};
+    bpg[2] = (extent[2] - 1) / (tpb[2] - 1) + 1;
+
+    dim3 TPB(tpb[0], tpb[1], tpb[2]);
+    dim3 BPG(bpg[0], bpg[1], bpg[2]);
+    inviscid_flux_1d<mix_model, turb_method><<<BPG, TPB, shared_mem>>>(zone, 2, extent[2], param);
   }
 }
 

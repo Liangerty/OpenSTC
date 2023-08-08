@@ -29,7 +29,7 @@ __device__ void compute_total_energy(integer i, integer j, integer k, cfd::DZone
     }
     cv(i, j, k, 4) -= bv(i, j, k, 4);  // (\rho e =\rho h - p)
   } else {
-    cv(i, j, k, 4) += bv(i, j, k, 4) / (cfd::gamma_air - 1);
+    cv(i, j, k, 4) += bv(i, j, k, 4) / (gamma_air - 1);
   }
   vel(i, j, k) = sqrt(vel(i, j, k));
 }

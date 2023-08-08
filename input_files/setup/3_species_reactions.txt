@@ -1,0 +1,10 @@
+// If the solver solves multispecies equations or basic equations.
+// If species are involved, how many? Is there any reaction involved?
+bool species = 1       //If there is species involved.
+bool reaction = 1      //If reactions are involved. Even no reactions are involved, the mechanism file should exit to clarify the species
+string mechanism_file = chemistry/combustion_mechanism.inp //GriMech3.0/grimech30_chem.inp
+string therm_file = chemistry/therm.dat //GriMech3.0/grimech30_thermo.dat
+string transport_file = chemistry/tran.dat //GriMech3.0/grimech30_transport.dat
+int chemSrcMethod = 1  // Method to treat chemical source. 0 - Explicit, 1 - Implicit(Exact), 2 - MDA, 3 - compute_chem_src_jacobian_diagonal, 4 - SA, 5 - HCST
+string mix_frac_elem = C    // Which element is used for mixture fraction computation
+real hcst_tolerance = 1e-4

@@ -23,6 +23,7 @@ struct DParameter {
   integer chemSrcMethod = 0;  // For finite rate chemistry, we need to know how to implicitly treat the chemical source
   integer n_spec = 0;
   integer n_scalar = 0;
+  integer n_reac = 0;
   real Pr = 0.72;
   real cfl = 1;
   real *mw = nullptr;
@@ -35,6 +36,13 @@ struct DParameter {
   real Sc = 0.9;
   real Prt = 0.9;
   real Sct = 0.9;
+  integer *reac_type = nullptr;
+  ggxl::MatrixDyn<integer> stoi_f, stoi_b;
+  integer *reac_order = nullptr;
+  real *A = nullptr, *b = nullptr, *Ea = nullptr;
+  real *A2 = nullptr, *b2 = nullptr, *Ea2 = nullptr;
+  ggxl::MatrixDyn<real> third_body_coeff;
+  real *troe_alpha = nullptr, *troe_t3 = nullptr, *troe_t1 = nullptr, *troe_t2 = nullptr;
 
 private:
   struct LimitFlow {

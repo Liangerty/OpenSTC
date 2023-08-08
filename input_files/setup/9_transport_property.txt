@@ -1,0 +1,14 @@
+﻿// Specify the method to compute transport properties. Mainly specify the diffusivity computation method.
+// Viscosity and thermal_conductivity are computed by collision integral methods if multi-species simulation is assumed.
+// Diffusivity is a per-species property and only need to be computed when species are turned on.
+
+// There are 3 methods to compute diffusivity in this code.
+// 0 - collision integral method: using the formula given by White's book
+// 1 - constant Schmidt number method: by giving a Schmidt number, all species diffusivity are assumed to be \mu/Sc
+// 2 - constant Lewis number per species: specify the Lewis number for every species and the D is computed by D_i=\alpha/Le_i
+int diffusivity_method = 1
+real schmidt_number = 0.5
+real prandtl_number = 0.72
+
+real turbulent_prandtl_number = 0.9
+real turbulent_schmidt_number = 0.9

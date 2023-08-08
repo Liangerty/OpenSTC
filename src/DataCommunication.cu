@@ -1,5 +1,4 @@
 #include "DataCommunication.cuh"
-#include "Field.h"
 
 __global__ void cfd::setup_data_to_be_sent(cfd::DZone *zone, integer i_face, real *data) {
   const auto &f = zone->parface[i_face];

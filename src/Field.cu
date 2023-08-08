@@ -1,41 +1,27 @@
 #include "Field.h"
 #include "BoundCond.h"
 
-template<MixtureModel mix_model, TurbMethod turb_method>
-cfd::Field<mix_model, turb_method>::Field(Parameter &parameter, const Block &block_in): block(block_in) {
+cfd::Field::Field(Parameter &parameter, const Block &block_in) : block(block_in) {
   const integer mx{block.mx}, my{block.my}, mz{block.mz}, ngg{block.ngg};
-//  const integer n_var{parameter.get_int("n_var")};
   n_var = parameter.get_int("n_var");
   integer n_scalar{0};
   integer n_other_var{1}; // Default, mach number
 
-//  cv.resize(mx, my, mz, n_var, ngg);
   bv.resize(mx, my, mz, 6, ngg);
-  if constexpr (mix_model == MixtureModel::Mixture) {
-    n_scalar += parameter.get_int("n_spec");
-  }
-  if constexpr (turb_method == TurbMethod::RANS) {
+  n_scalar += parameter.get_int("n_spec");
+  if (parameter.get_int("turbulence_method") == 1) {
+    // RANS
     n_scalar += parameter.get_int("n_turb");
     n_other_var += 1; // mut
   }
-  if constexpr (mix_model == MixtureModel::FL && turb_method != TurbMethod::Laminar) {
-    n_scalar += 2 + parameter.get_int("n_spec"); // mixture fraction, and its fluctuation.
-    n_other_var += 1; // scalar dissipation rate
-  }
   sv.resize(mx, my, mz, n_scalar, ngg);
   ov.resize(mx, my, mz, n_other_var, ngg);
-//  var_without_ghost_grid.resize(mx, my, mz, 1, 0); // Only to have wall_dist, if more are needed, then add nl.
 }
 
-template<MixtureModel mix_model, TurbMethod turb_method>
-void cfd::Field<mix_model, turb_method>::initialize_basic_variables(const Parameter &parameter,
-                                                                    const std::vector<Inflow<mix_model, turb_method>> &inflows,
-                                                                    const std::vector<real> &xs,
-                                                                    const std::vector<real> &xe,
-                                                                    const std::vector<real> &ys,
-                                                                    const std::vector<real> &ye,
-                                                                    const std::vector<real> &zs,
-                                                                    const std::vector<real> &ze) {
+void cfd::Field::initialize_basic_variables(const Parameter &parameter, const std::vector<Inflow> &inflows,
+                                            const std::vector<real> &xs, const std::vector<real> &xe,
+                                            const std::vector<real> &ys, const std::vector<real> &ye,
+                                            const std::vector<real> &zs, const std::vector<real> &ze) {
   const auto n = inflows.size();
   std::vector<real> rho(n, 0), u(n, 0), v(n, 0), w(n, 0), p(n, 0), T(n, 0);
   const integer n_scalar = parameter.get_int("n_scalar");
@@ -80,8 +66,7 @@ void cfd::Field<mix_model, turb_method>::initialize_basic_variables(const Parame
   }
 }
 
-template<MixtureModel mix_model, TurbMethod turb_method>
-void cfd::Field<mix_model, turb_method>::setup_device_memory(const Parameter &parameter) {
+void cfd::Field::setup_device_memory(const Parameter &parameter) {
   h_ptr = new DZone;
   h_ptr->mx = block.mx, h_ptr->my = block.my, h_ptr->mz = block.mz, h_ptr->ngg = block.ngg;
 
@@ -130,8 +115,19 @@ void cfd::Field<mix_model, turb_method>::setup_device_memory(const Parameter &pa
   if (h_ptr->n_spec > 0) {
     h_ptr->gamma.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
     h_ptr->cp.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
+    if (parameter.get_int("n_reac") > 0) {
+      // Finite rate chemistry
+      if (const integer chemSrcMethod = parameter.get_int("chemSrcMethod");chemSrcMethod == 1) {
+        // EPI
+        h_ptr->chem_src_jac.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->n_spec * h_ptr->n_spec, 0);
+      } else if (chemSrcMethod == 2) {
+        // DA
+        h_ptr->chem_src_jac.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->n_spec, 0);
+      }
+    }
   }
-  if constexpr (turb_method == TurbMethod::RANS) {
+  if (parameter.get_int("turbulence_method") == 1) {
+    // RANS method
     h_ptr->mut.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
     h_ptr->turb_therm_cond.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
     if (parameter.get_int("RANS_model") == 2) {
@@ -142,6 +138,17 @@ void cfd::Field<mix_model, turb_method>::setup_device_memory(const Parameter &pa
       }
     }
   }
+//  if constexpr (turb_method == TurbMethod::RANS) {
+//    h_ptr->mut.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
+//    h_ptr->turb_therm_cond.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
+//    if (parameter.get_int("RANS_model") == 2) {
+//      // SST
+//      h_ptr->wall_distance.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->ngg);
+//      if (parameter.get_int("turb_implicit") == 1) {
+//        h_ptr->turb_src_jac.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, 2, 0);
+//      }
+//    }
+//  }
 
   h_ptr->dq.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, h_ptr->n_var, 0);
   h_ptr->inv_spectr_rad.allocate_memory(h_ptr->mx, h_ptr->my, h_ptr->mz, 0);
@@ -163,36 +170,13 @@ void cfd::Field<mix_model, turb_method>::setup_device_memory(const Parameter &pa
   cudaMemcpy(d_ptr, h_ptr, sizeof(DZone), cudaMemcpyHostToDevice);
 }
 
-template<MixtureModel mix_model, TurbMethod turb_method>
-void cfd::Field<mix_model, turb_method>::copy_data_from_device() {
+void cfd::Field::copy_data_from_device(const Parameter &parameter) {
   const auto size = (block.mx + 2 * block.ngg) * (block.my + 2 * block.ngg) * (block.mz + 2 * block.ngg);
 
   cudaMemcpy(bv.data(), h_ptr->bv.data(), 6 * size * sizeof(real), cudaMemcpyDeviceToHost);
   cudaMemcpy(ov.data(), h_ptr->mach.data(), size * sizeof(real), cudaMemcpyDeviceToHost);
-  if constexpr (turb_method == TurbMethod::RANS) {
-//    cudaMemcpy(ov[1], h_ptr->wall_distance.data(), size * sizeof(real), cudaMemcpyDeviceToHost);
+  if (parameter.get_int("turbulence_method") == 1) {
     cudaMemcpy(ov[1], h_ptr->mut.data(), size * sizeof(real), cudaMemcpyDeviceToHost);
   }
   cudaMemcpy(sv.data(), h_ptr->sv.data(), h_ptr->n_scal * size * sizeof(real), cudaMemcpyDeviceToHost);
 }
-
-
-// We need to explicitly write out all possible instantiations here.
-// This is the drawback of the current method, every possible combination of the methods must be listed
-template
-class cfd::Field<MixtureModel::Air, TurbMethod::Laminar>;
-
-template
-class cfd::Field<MixtureModel::Air, TurbMethod::RANS>;
-
-template
-class cfd::Field<MixtureModel::Mixture, TurbMethod::Laminar>;
-
-template
-class cfd::Field<MixtureModel::Mixture, TurbMethod::RANS>;
-
-template
-class cfd::Field<MixtureModel::FR, TurbMethod::Laminar>;
-
-template
-class cfd::Field<MixtureModel::FR, TurbMethod::RANS>;

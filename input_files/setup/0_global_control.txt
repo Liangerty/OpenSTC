@@ -1,0 +1,5 @@
+bool parallel = 0  // parallel or serial computation? 0 for serial, 1 for parallel
+int initial = 0       // method of initialization. 0 for new computation; 1 for reading old results and continuing.
+int total_step = 10000	// Steps for continuing computation 1000
+int output_file = 5000     // Steps for output files
+int output_screen = 1000     // Steps for output to screen

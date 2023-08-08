@@ -1,0 +1,25 @@
+// The scheme used for computation.
+// First, the temporal method is specified
+bool    steady = 1  // If the computation is steady(1) or unsteady(0)
+real    cfl = 0.5    // The CFL number for time integration 0.1
+// bool    explicit = 1    // Explicit(1) or implicit(0) integration
+int     implicit_method = 1 // How to implicitly treat the ODE. 0 - Explicit integration; 1 - DPLUR
+int     DPLUR_inner_step = 3 // If we use DPLUR, then we need a specified number of inner iterations.
+real convergence_criteria = 1e-5 // The criteria of convergence
+// Tag for temporal scheme. Methods in single digit for steady simulation; methods bigger than 10 for transient simulation.
+// 0-ExplicitEuler; 1-LUSGS; 3-DPLUR
+// 11-ExplicitEuler; 21-Dual-time iteration with LUSGS; 22-Dual-time iteration with DPLUR; 31-TVD 3rd order RK
+int	 temporal_scheme = 0
+real dt = 1e-9   // In unsteady simulation, the time step should be given
+real total_simulation_time = 7e-3    // In unsteady simulation, how long physical time to be simulated
+int     inner_iteration = 20
+// Next, the inviscid discretization is declared.
+// Tag for inviscid schemes. 2-Roe; 3-AUSM+; 51-WENO5(component); 52-WENO5(characteristic); 71-WENO7(component); 72-WENO7(characteristic)
+int  inviscid_scheme = 3
+// Tag for reconstruction method. 1-1st_order, 2-MUSCL, 3-NND2
+int  reconstruction = 3
+// Tag for limiters. 0-minmod
+int  limiter = 0
+real entropy_fix_factor = 0.125   // If Roe scheme is used, the entropy fix factor should be given
+// Next, the viscous discretization order is declared.
+int viscous_order = 2   // Default: 2nd order central discretization. Other choices: 0(inviscid)

@@ -1,8 +1,7 @@
 # There are several options need to be set here
 # 1. "CMAKE_CUDA_ARCHITECTURES", the CUDA architecture should be specified
 #     For example, for Nvidia Quadro GP100, the value should be 60, while for GV100, 70
-# 2. "MULTISPECIES" Whether the simulation is for mixture(1) or air(0),
-# 3. "MAX_SPEC_NUMBER" if mixture, the number of species should not beyond 55, which is set by allowing the computation of CH4 in Grimech mechanism.
+# 2. "MAX_SPEC_NUMBER" if mixture, the number of species should not beyond 55, which is set by allowing the computation of CH4 in Grimech mechanism.
 #     If larger mechanism is to be used, the variable should be modified to be larger or equal to the species number.
 #     However, the correctness, if the resource is available for the corresponding kernel may need to be tested.
 
@@ -12,8 +11,8 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
   set(CMAKE_CUDA_ARCHITECTURES 60)
 endif()
 
-add_compile_definitions(MULTISPECIES=1)
-add_compile_definitions(MAX_SPEC_NUMBER=55)
+add_compile_definitions(MAX_SPEC_NUMBER=20)
+add_compile_definitions(MAX_REAC_NUMBER=50)
 add_compile_definitions(GPU)
 
 project(OpenSTC CUDA CXX)

@@ -1,0 +1,4 @@
+int dimension = 2   // problem dimension
+real gridScale = 0.001 //grid scale in meters
+real referenceLength = 1.0 //reference length in meters
+int wall_distance = 0   // How to acquire the wall distance? 0 - compute. 1 - read

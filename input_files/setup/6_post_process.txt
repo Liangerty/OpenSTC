@@ -1,0 +1,8 @@
+// Which post process to be used
+
+// Just write the label of the corresponding method in the array
+// Available: 0 - Compute cf/qw in 2D, with j=0 as the default wall
+
+array   int post_process {
+    // 0
+}

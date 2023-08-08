@@ -1,0 +1,5 @@
+bool    turbulence = 1               // If you are simulating a laminar flow or turbulent flow
+int     turbulence_method = 1           // Turbulence model used. Options: 0 - DNS, 1 - RANS, DES, LES
+int     fluctuate_method = 0            // How to supply the turbulence fluctuation. 0 - turbulence library(Mo/Duan), white noise, synthetic turbulence...
+int     RANS_model = 2                  // RANS model used. Options: 2 - k-omega_SST, 1 - S-A
+int     turb_implicit   =   1           // If we use RANS, choose whether the source terms are implicitly treated. 1 - Yes(Default), 0 - No

@@ -1,0 +1,3 @@
+           2           0
+           0           0
+ imin  imax  jmin  jmax  kmin  kmax   s_r_id  s_flag  r_flag

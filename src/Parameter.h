@@ -17,6 +17,7 @@ class Parameter {
   std::unordered_map<std::string, real> real_parameters{};
   std::unordered_map<std::string, bool> bool_parameters{};
   std::unordered_map<std::string, std::string> string_parameters{};
+  std::unordered_map<std::string, std::vector<int>> int_array{};
   std::unordered_map<std::string, std::vector<real>> real_array{};
   std::unordered_map<std::string, std::vector<std::string>> string_array{};
   std::unordered_map<std::string, std::map<std::string, std::variant<std::string, integer, real>>> struct_array;
@@ -51,6 +52,7 @@ public:
 
   [[nodiscard]] const auto& get_string_array(const std::string &name)const{return string_array.at(name);}
   [[nodiscard]] const auto& get_real_array(const std::string &name)const{return real_array.at(name);}
+  [[nodiscard]] const auto& get_int_array(const std::string &name)const{return int_array.at(name);}
 
   void update_parameter(const std::string &name, const int new_value) { int_parameters[name] = new_value; }
   void update_parameter(const std::string &name, const real new_value) { real_parameters[name] = new_value; }
@@ -59,13 +61,14 @@ public:
   ~Parameter() = default;
 
 private:
-  const std::array<std::string, 8> file_names{
+  const std::array<std::string, 9> file_names{
       "./input_files/setup/0_global_control.txt",   //basic information about the simulation
       "./input_files/setup/1_grid_information.txt", //the information about grid
       "./input_files/setup/2_scheme.txt",
       "./input_files/setup/3_species_reactions.txt",
       "./input_files/setup/4_laminar_turbulent.txt",
       "./input_files/setup/5_boundary_condition.txt",
+      "./input_files/setup/6_post_process.txt",
       "./input_files/setup/8_initialization.txt",
       "./input_files/setup/9_transport_property.txt"
   };

@@ -4,22 +4,20 @@
 #include <vector>
 #include <mpi.h>
 #include "Mesh.h"
-#include "Parameter.h"
 #include "Field.h"
 #include "DParameter.h"
 #include "FieldOperation.cuh"
 
 namespace cfd {
 template<MixtureModel mix_model, TurbMethod turb_method>
-void data_communication(const Mesh &mesh, std::vector<cfd::Field<mix_model, turb_method>> &field,
-                        const Parameter &parameter, integer step, DParameter *param);
+void data_communication(const Mesh &mesh, std::vector<cfd::Field> &field, const Parameter &parameter, integer step,
+                        DParameter *param);
 
 template<MixtureModel mix_model, TurbMethod turb_method>
 __global__ void inner_communication(DZone *zone, DZone *tar_zone, integer i_face, DParameter *param);
 
 template<MixtureModel mix_model, TurbMethod turb_method>
-void parallel_communication(const Mesh &mesh, std::vector<cfd::Field<mix_model, turb_method>> &field, integer step,
-                            DParameter *param);
+void parallel_communication(const Mesh &mesh, std::vector<cfd::Field> &field, integer step, DParameter *param);
 
 __global__ void setup_data_to_be_sent(DZone *zone, integer i_face, real *data);
 
@@ -27,8 +25,8 @@ template<MixtureModel mix_model, TurbMethod turb_method>
 __global__ void assign_data_received(DZone *zone, integer i_face, const real *data, DParameter *param);
 
 template<MixtureModel mix_model, TurbMethod turb_method>
-void data_communication(const Mesh &mesh, std::vector<cfd::Field<mix_model, turb_method>> &field,
-                        const Parameter &parameter, integer step, DParameter *param) {
+void data_communication(const Mesh &mesh, std::vector<Field> &field, const Parameter &parameter, integer step,
+                        DParameter *param) {
   // -1 - inner faces
   for (auto blk = 0; blk < mesh.n_block; ++blk) {
     auto &inF = mesh[blk].inner_face;
@@ -100,9 +98,7 @@ __global__ void inner_communication(DZone *zone, DZone *tar_zone, integer i_face
 }
 
 template<MixtureModel mix_model, TurbMethod turb_method>
-void
-parallel_communication(const cfd::Mesh &mesh, std::vector<cfd::Field<mix_model, turb_method>> &field, integer step,
-                       DParameter *param) {
+void parallel_communication(const cfd::Mesh &mesh, std::vector<cfd::Field> &field, integer step, DParameter *param) {
   const int n_block{mesh.n_block};
   const int n_trans{field[0].n_var}; // we transfer conservative variables here
   const int ngg{mesh[0].ngg};

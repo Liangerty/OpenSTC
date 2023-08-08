@@ -1,0 +1,51 @@
+// Specify the information about boundaries.
+
+// Write the names of non-default bcs in the following array
+// Bcs like outflow does not need to appear here, because the behaviour of it is invariant.
+// In the future, if some advanced "outflow" conditions are introduced, then it may be added here.
+array   string  boundary_conditions {
+    freestream fuel  wall
+}
+
+// Inflow and Wall conditions must be described here.
+struct  freestream {
+    // string  name            =   freestream
+    string  type            =   inflow
+    int     label           =   5
+    real    temperature     =   1270
+    real    mach            =   2.44
+    real    pressure        =   105431
+    real    u               =   1
+    real    v               =   0
+    real    w               =   0
+    int     mole_or_mass    =   1   // Specify whether the fuel composition is given in mole fraction or mass fraction. 0 for mole fraction, 1 for mass fraction
+    real    O2              =   0.258
+    real    N2              =   0.486
+    real    H2O              =   0.256
+    real    turbulence_intensity    =   0.01
+    real    turb_viscosity_ratio    =   1       // mut/mu
+}
+
+struct  fuel {
+    // string  name            =   freestream
+    string  type            =   inflow
+    int     label           =   9
+    real    temperature     =   254
+    real    mach            =   1
+    real    pressure        =   105431
+    real    u               =   1
+    real    v               =   0
+    real    w               =   0
+    int     mole_or_mass    =   1   // Specify whether the fuel composition is given in mole fraction or mass fraction. 0 for mole fraction, 1 for mass fraction
+    real    H2              =   1
+    real    turbulence_intensity    =   0.01
+    real    turb_viscosity_ratio    =   1       // mut/mu
+}
+
+struct  wall {
+    // string  name            =   wall
+    string  type            =   wall
+    int     label           =   2
+    string  thermal_type    =   isothermal  // Thermal wall type can be 1. "adiabatic" wall; 2. "isothermal" wall
+    real    temperature     =   294.4         // If the wall is isothermal, the temperature should be given
+}

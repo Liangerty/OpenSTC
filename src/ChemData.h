@@ -7,6 +7,7 @@
 namespace cfd {
 struct Species {
   explicit Species(Parameter &parameter);
+
   integer n_spec{0};  // number of species
   std::map<std::string, integer> spec_list; // species list
 
@@ -33,21 +34,37 @@ struct Species {
 private:
   void set_nspec(integer n_sp, integer n_elem);
 
-  void register_spec(const std::string &name, integer &index);
+  bool read_therm(std::ifstream &therm_dat, bool read_from_comb_mech);
 
-  void read_therm(Parameter &parameter);
-
-  void read_tran(Parameter &parameter);
+  void read_tran(std::ifstream &tran_dat);
 };
 
 struct Reaction {
-  explicit Reaction(Parameter &parameter);
-};
+  explicit Reaction(Parameter &parameter, const Species& species);
 
-struct ChemData {
-  explicit ChemData(Parameter &parameter);
+private:
+  void set_nreac(integer nr, integer ns);
 
-  Species spec;
-  Reaction reac;
+  void read_reaction_line(std::string input, integer idx, const Species& species);
+
+  std::string get_auxi_info(std::ifstream &file, integer idx, const cfd::Species &species, bool &is_dup);
+
+public:
+  integer n_reac{0};
+  // The label represents which method to compute kf and kb.
+  // 0 - Irreversible, 1 - Reversible
+  // 2 - REV (reversible with both kf and kb Arrhenius coefficients given)
+  // 3 - DUP (Multiple sets of kf Arrhenius coefficients given)
+  // 4 - Third body reactions ( +M is added on both sides, indicating the reaction needs catylists)
+  // 5 - Lindemann Type (Pressure dependent reactions computed with Lindemann type method)
+  // 6 - Troe-3 (Pressure dependent reactions computed with Troe type method, 3 parameters)
+  // 7 - Troe-4 (Pressure dependent reactions computed with Troe type method, 4 parameters)
+  std::vector<integer> label;
+  gxl::MatrixDyn<integer> stoi_f, stoi_b;
+  std::vector<integer> order;
+  std::vector<real> A, b, Ea;
+  std::vector<real> A2, b2, Ea2;
+  gxl::MatrixDyn<real> third_body_coeff;
+  std::vector<real> troe_alpha, troe_t3, troe_t1, troe_t2;
 };
 }

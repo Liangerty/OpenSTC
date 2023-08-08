@@ -3,11 +3,9 @@
 #include "Define.h"
 #include "mpi.h"
 #include "Field.h"
-//#include "Mesh.h"
 #include "ChemData.h"
 #include <filesystem>
 #include <fstream>
-//#include "gxl_lib/MyString.h"
 
 namespace cfd {
 
@@ -15,13 +13,11 @@ void write_str(const char *str, MPI_File &file, MPI_Offset &offset);
 
 void write_str_without_null(const char *str, MPI_File &file, MPI_Offset &offset);
 
-//std::string read_str(MPI_File *file);
-
 template<MixtureModel mix_model, TurbMethod turb_method>
 class MPIIO {
   const int myid{0};
   const Mesh &mesh;
-  std::vector<cfd::Field<mix_model, turb_method>> &field;
+  std::vector<Field> &field;
   const Parameter &parameter;
   const Species &species;
   int32_t n_var = 10;
@@ -31,8 +27,8 @@ class MPIIO {
   MPI_Offset *offset_var = nullptr;
 
 public:
-  MPIIO(integer _myid, const Mesh &_mesh, std::vector<Field<mix_model, turb_method>> &_field,
-        const Parameter &_parameter, const Species &spec, int ngg_out);
+  MPIIO(integer _myid, const Mesh &_mesh, std::vector<Field> &_field, const Parameter &_parameter, const Species &spec,
+        int ngg_out);
 
   void print_field(integer step) const;
 
@@ -47,8 +43,7 @@ private:
 };
 
 template<MixtureModel mix_model, TurbMethod turb_method>
-MPIIO<mix_model, turb_method>::MPIIO(integer _myid, const cfd::Mesh &_mesh,
-                                     std::vector<Field<mix_model, turb_method>> &_field,
+MPIIO<mix_model, turb_method>::MPIIO(integer _myid, const cfd::Mesh &_mesh, std::vector<Field> &_field,
                                      const cfd::Parameter &_parameter, const cfd::Species &spec,
                                      int ngg_out):
     myid{_myid}, mesh{_mesh}, field(_field), parameter{_parameter}, species{spec}, ngg_output{ngg_out} {
@@ -432,7 +427,7 @@ void MPIIO<mix_model, turb_method>::print_field(integer step) const {
 
   // Copy data from GPU to CPU
   for (auto &f: field) {
-    f.copy_data_from_device();
+    f.copy_data_from_device(parameter);
   }
 
   const std::filesystem::path out_dir("output/field");

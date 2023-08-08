@@ -34,6 +34,22 @@ __global__ void compute_DQ_0(DZone *zone, const DParameter *param) {
       dq(i, j, k, l) /= diag;
     }
     // Point implicit
+    switch (param->chemSrcMethod) {
+      case 1: // EPI
+        EPI_for_dq0(zone, diag, i, j, k);
+        break;
+      case 2: // DA
+        for (int l = 0; l < zone->n_spec; ++l) {
+          zone->dq(i, j, k, 5 + l) /= diag - dt_local * zone->chem_src_jac(i, j, k, l);
+        }
+        break;
+      case 0: // explicit treat
+      default:
+        for (integer l = 0; l < n_spec; ++l) {
+          dq(i, j, k, l + 5) /= diag;
+        }
+        break;
+    }
   } // Flamelet method can be added later
 
   if constexpr (turb_method == TurbMethod::RANS) {
@@ -190,6 +206,23 @@ __global__ void DPLUR_inner_iteration(const DParameter *param, DZone *zone) {
       dqk(i, j, k, l) = dq0(i, j, k, l) + dt_local * dq_total[l] / diag;
     }
     // Point implicit
+    switch (param->chemSrcMethod) {
+      case 1: // EPI
+        EPI_for_dqk(zone, diag, i, j, k, dq_total);
+        break;
+      case 2: // DA
+        for (int l = 0; l < zone->n_spec; ++l) {
+          dqk(i, j, k, 5 + l) =
+              dq0(i, j, k, 5 + l) + dt_local * dq_total[5 + l] / (diag - dt_local * zone->chem_src_jac(i, j, k, l));
+        }
+        break;
+      case 0: // explicit treat
+      default:
+        for (integer l = 0; l < n_spec; ++l) {
+          dqk(i, j, k, 5 + l) = dq0(i, j, k, 5 + l) + dt_local * dq_total[5 + l] / diag;
+        }
+        break;
+    }
   } // Flamelet method can be added later
 
   if constexpr (turb_method == TurbMethod::RANS) {
