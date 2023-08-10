@@ -239,7 +239,7 @@ void Driver<mix_model, turb_method>::steady_simulation() {
       compute_inviscid_flux<mix_model, turb_method>(mesh[b], field[b].d_ptr, param, n_var);
       compute_viscous_flux<mix_model, turb_method>(mesh[b], field[b].d_ptr, param, n_var);
 
-      // compute local time step
+      // compute the local time step
       local_time_step<mix_model, turb_method><<<bpg[b], tpb>>>(field[b].d_ptr, param);
       // implicit treatment if needed
       implicit_treatment<mix_model, turb_method>(mesh[b], param, field[b].d_ptr, parameter, field[b].h_ptr);
@@ -272,7 +272,7 @@ void Driver<mix_model, turb_method>::steady_simulation() {
     }
 
     // Finally, test if the simulation reaches convergence state
-    if (step % output_screen == 0) {
+    if (step % output_screen == 0 || step == 1) {
       real err_max = compute_residual(step);
       converged = err_max < parameter.get_real("convergence_criteria");
       if (myid == 0) {
@@ -339,7 +339,7 @@ real Driver<mix_model, turb_method>::compute_residual(integer step) {
     e = std::sqrt(e / mesh.n_grid_total);
   }
 
-  if (step == parameter.get_int("output_screen")) {
+  if (step == 1) {
     for (integer i = 0; i < n_res_var; ++i) {
       res_scale[i] = res[i];
       if (res_scale[i] < 1e-20) {
@@ -382,9 +382,9 @@ real Driver<mix_model, turb_method>::compute_residual(integer step) {
 template<MixtureModel mix_model, TurbMethod turb_method>
 void Driver<mix_model, turb_method>::steady_screen_output(integer step, real err_max) {
   time.get_elapsed_time();
-  std::ofstream history("history.dat", std::ios::app);
-  history << step << '\t' << err_max << '\n';
-  history.close();
+  FILE *history = std::fopen("history.dat", "a");
+  fprintf(history, "%d\t%11.4e\n", step, err_max);
+  fclose(history);
 
   printf("\n%38s    converged to: %11.4e\n", "rho", res[0]);
   printf("  n=%8d,                       V     converged to: %11.4e   \n", step, res[1]);
@@ -404,7 +404,7 @@ template<MixtureModel mix_model, TurbMethod turb_method>
 void Driver<mix_model, turb_method>::post_process() {
   static const std::vector<integer> processes{parameter.get_int_array("post_process")};
 
-  for (auto process:processes){
+  for (auto process: processes) {
     switch (process) {
       case 0: // Compute the 2D cf/qw
         wall_friction_heatflux_2d(mesh, field, parameter);
